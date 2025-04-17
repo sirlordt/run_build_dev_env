@@ -1,9 +1,26 @@
 #!/bin/bash
 
-# build_cpp_dev_en.sh
+# build_cpp_dev_env.sh
 # Script to set up a C++ development environment using distrobox
 
+# Set error handling
 set -e
+
+echo "Starting build_cpp_dev_env.sh at $(date)"
+
+# Function to clean up if something goes wrong
+cleanup() {
+    echo "Cleaning up distrobox environment..."
+    distrobox stop cpp_dev_env 2>/dev/null || true
+    distrobox rm cpp_dev_env 2>/dev/null || true
+    echo "Cleanup completed."
+}
+
+# Add option to clean up
+if [ "$1" = "--cleanup" ]; then
+    cleanup
+    exit 0
+fi
 
 echo "Setting up C++ development environment with distrobox..."
 
@@ -33,43 +50,67 @@ CONTAINER_NAME="cpp_dev_env"
 echo "Creating Ubuntu 22.04 container named $CONTAINER_NAME..."
 distrobox create --name $CONTAINER_NAME --image ubuntu:22.04
 
-# Enter container and set up development environment
+# Create a setup script to run inside the container
+echo "Creating setup script..."
+cat > setup_container.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Update package lists
+echo "Updating package lists..."
+sudo apt update
+
+# Install basic development tools
+echo "Installing build-essential, git, mc, htop..."
+sudo apt install -y build-essential git mc htop python3-pip
+
+# Install Conan from pip3
+echo "Installing Conan package manager..."
+pip3 install conan
+
+# Install latest CMake
+echo "Installing latest CMake..."
+CMAKE_VERSION="3.28.3"
+wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh -O /tmp/cmake-install.sh
+chmod +x /tmp/cmake-install.sh
+sudo /tmp/cmake-install.sh --skip-license --prefix=/usr/local
+
+# Install VSCode
+echo "Installing Visual Studio Code..."
+sudo apt install -y software-properties-common apt-transport-https wget
+wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
+sudo apt update
+sudo apt install -y code
+
+# Create project directory structure
+echo "Creating project directory structure..."
+mkdir -p ~/Desktop/projects/cpp
+
+# Create C++ demo project
+echo "Creating C++ demo project..."
+mkdir -p ~/Desktop/projects/cpp/cpp_demo
+cd ~/Desktop/projects/cpp/cpp_demo
+
+# Generate Conan profile
+echo "Generating Conan profile..."
+conan profile detect
+EOF
+
+# Make the setup script executable
+chmod +x setup_container.sh
+
+# Execute the setup commands directly inside the container
 echo "Setting up development environment inside container..."
-distrobox enter $CONTAINER_NAME -- bash -c '
-    # Update package lists
-    sudo apt update
-    
-    # Install basic development tools
-    echo "Installing build-essential, git, mc, htop..."
-    sudo apt install -y build-essential git mc htop python3-pip
-    
-    # Install Conan from pip3
-    echo "Installing Conan package manager..."
-    pip3 install conan
-    
-    # Install latest CMake
-    echo "Installing latest CMake..."
-    CMAKE_VERSION="3.28.3"
-    wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh -O /tmp/cmake-install.sh
-    chmod +x /tmp/cmake-install.sh
-    sudo /tmp/cmake-install.sh --skip-license --prefix=/usr/local
-    
-    # Install VSCode
-    echo "Installing Visual Studio Code..."
-    sudo apt install -y software-properties-common apt-transport-https wget
-    wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
-    sudo add-apt-repository "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
-    sudo apt update
-    sudo apt install -y code
-    
-    # Create C++ demo project
-    echo "Creating C++ demo project..."
-    mkdir -p ~/cpp_demo
-    cd ~/cpp_demo
-    
-    # Generate Conan profile
-    echo "Generating Conan profile..."
-    conan profile detect
+distrobox enter $CONTAINER_NAME -- bash -c "$(cat setup_container.sh)"
+
+# Create a script for creating project files
+echo "Creating project files script..."
+cat > create_project_files.sh << 'EOF'
+#!/bin/bash
+set -e
+
+cd ~/Desktop/projects/cpp/cpp_demo
     
     # Create main.cpp
     echo "Creating main.cpp..."
@@ -145,12 +186,12 @@ EOF
 echo "Creating .env_dist file..."
 cat > .env_dist << 'EOF'
 APP_NAME=cpp_demo
-APP_VERSION=${YYYY-MM-DD-HH-MM-SS-Z}
+APP_VERSION=${YYYY-MM-DD-HH-MM-SS_Z}
 DEBUG_MODE=true
 LOG_LEVEL=info
 BUILD_TYPE=Debug
 CONTAINER_NAME=${Container_Bin_Name}
-BUILD_TIMESTAMP=${YYYY-MM-DD-HH-MM-SS-Z}
+BUILD_TIMESTAMP=${YYYY-MM-DD-HH-MM-SS_Z}
 INSTALL_PATH=${Container_Bin_Path}
 EOF
 
@@ -162,7 +203,7 @@ Container_Bin_Name="cpp_demo"
 Container_Bin_Path=/usr/local/bin/${Container_Bin_Name}
 Container_Description="my demo app for distro box"
 Container_Mantainer="dev1 <dev001@domain.com>;dev2 <dev2@domain.com>"
-Container_Tags="tag1,tag2,${YYYY-MM-DD-HH-MM-SS-Z}"
+Container_Tags="tag1,tag2,${YYYY-MM-DD-HH-MM-SS_Z}"
 EOF
 
 # Create VSCode configuration
@@ -266,9 +307,9 @@ else
 fi
 
 # Process variables
-TIMESTAMP=$(date "+%Y-%m-%d-%H-%M-%S-%z")
+TIMESTAMP=$(date "+%Y-%m-%d-%H-%M-%S_%z")
 PROCESSED_CONTAINER_BIN_PATH=${Container_Bin_Path/\$\{Container_Bin_Name\}/$Container_Bin_Name}
-PROCESSED_CONTAINER_TAGS=${Container_Tags/\$\{YYYY-MM-DD-HH-MM-SS-Z\}/$TIMESTAMP}
+PROCESSED_CONTAINER_TAGS=${Container_Tags/\$\{YYYY-MM-DD-HH-MM-SS_Z\}/$TIMESTAMP}
 
 echo "Container Name: $Container_Name"
 echo "Binary Name: $Container_Bin_Name"
@@ -287,7 +328,7 @@ if [ -f .env_dist ]; then
         processed_line=$line
         processed_line=${processed_line/\$\{Container_Bin_Name\}/$Container_Bin_Name}
         processed_line=${processed_line/\$\{Container_Bin_Path\}/$PROCESSED_CONTAINER_BIN_PATH}
-        processed_line=${processed_line/\$\{YYYY-MM-DD-HH-MM-SS-Z\}/$TIMESTAMP}
+        processed_line=${processed_line/\$\{YYYY-MM-DD-HH-MM-SS_Z\}/$TIMESTAMP}
         
         ENV_VARS+="ENV $processed_line\n"
     done < .env_dist
@@ -414,35 +455,48 @@ echo "Build completed successfully!"
 echo "You can run the application with: ./build/\$(grep Container_Bin_Name ../.dist_build | cut -d'=' -f2 | tr -d '\"')"
 EOF
 
-# Make scripts executable
-chmod +x build.dist.sh
-chmod +x build.sh
-echo "Making scripts executable..."
+# Make the create_project_files script executable
+chmod +x create_project_files.sh
 
-# Create README.md
-echo "Creating README.md..."
-cat > README.md << '\''EOF'\''
+# Execute the project files creation directly inside the container
+echo "Creating project files inside container..."
+distrobox enter $CONTAINER_NAME -- bash -c "$(cat create_project_files.sh)"
+
+# Make scripts executable inside the container
+echo "Making scripts executable inside container..."
+distrobox enter $CONTAINER_NAME -- bash -c "cd ~/Desktop/projects/cpp/cpp_demo && chmod +x build.dist.sh build.sh"
+
+# Create README.md for the project
+echo "Creating README.md for the project..."
+cat > create_readme.sh << 'EOF'
+#!/bin/bash
+set -e
+
+cd ~/Desktop/projects/cpp/cpp_demo
+
+cat > README.md << 'EOF_README'
 # C++ Development Environment with Distrobox
 
 This project provides scripts to set up a C++ development environment using Distrobox and create a containerized C++ application.
 
+## Features
+
+- **Automatic Distrobox Installation**: Checks if Distrobox is installed and installs it if necessary
+- **Ubuntu 22.04 Container**: Creates a container with Ubuntu 22.04 as the base image
+- **Development Tools**: Installs essential development tools inside the container:
+  - build-essential, git, mc, htop
+  - Conan package manager (via pip3)
+  - Latest CMake version
+  - Visual Studio Code
+- **C++ Demo Project**: Creates a simple C++ project with:
+  - CMake configuration with C++23 support
+  - Conan package management
+  - VSCode debug configuration
+- **Containerization**: Provides tools to create a minimal Docker container for the application
+- **Logging**: Automatically logs all output to a timestamped log file
+- **Cleanup Option**: Includes a `--cleanup` option to easily remove the container if needed
+
 ## Scripts
-
-### build_cpp_dev_en.sh
-
-This script sets up a complete C++ development environment using Distrobox:
-
-1. Checks if Distrobox is installed and installs it if necessary
-2. Creates an Ubuntu 22.04 container
-3. Installs development tools inside the container:
-   - build-essential, git, mc, htop
-   - Conan package manager (via pip3)
-   - Latest CMake version
-   - Visual Studio Code
-4. Creates a simple C++ demo project with:
-   - CMake configuration
-   - Conan package management
-   - VSCode debug configuration
 
 ### build.sh
 
@@ -479,7 +533,7 @@ Container_Bin_Name="cpp_demo"
 Container_Bin_Path=/usr/local/bin/${Container_Bin_Name}
 Container_Description="my demo app for distro box"
 Container_Mantainer="dev1 <dev001@domain.com>;dev2 <dev2@domain.com>"
-Container_Tags="tag1,tag2,${YYYY-MM-DD-HH-MM-SS-Z}"
+Container_Tags="tag1,tag2,${YYYY-MM-DD-HH-MM-SS_Z}"
 ```
 
 ### .env_dist
@@ -488,12 +542,12 @@ Contains environment variables to be set in the container:
 
 ```
 APP_NAME=cpp_demo
-APP_VERSION=0.1.0
+APP_VERSION=${YYYY-MM-DD-HH-MM-SS_Z}
 DEBUG_MODE=true
 LOG_LEVEL=info
 BUILD_TYPE=Debug
 CONTAINER_NAME=${Container_Bin_Name}
-BUILD_TIMESTAMP=${YYYY-MM-DD-HH-MM-SS-Z}
+BUILD_TIMESTAMP=${YYYY-MM-DD-HH-MM-SS_Z}
 INSTALL_PATH=${Container_Bin_Path}
 ```
 
@@ -511,45 +565,93 @@ The project includes VSCode configuration for C++ development:
 
 ## Usage
 
-1. Run the setup script:
-   ```
-   ./build_cpp_dev_en.sh
-   ```
-
-2. Enter the Distrobox container:
+1. Enter the Distrobox container:
    ```
    distrobox enter cpp_dev_env
    ```
 
-3. Navigate to the project and build it:
+2. Navigate to the project and build it:
    ```
-   cd ~/cpp_demo
+   cd ~/Desktop/projects/cpp/cpp_demo
    ./build.sh
    ```
    
    Or manually:
    ```
-   cd ~/cpp_demo
+   cd ~/Desktop/projects/cpp/cpp_demo
    mkdir -p build && cd build
    conan install .. --output-folder=. --build=missing
    cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
    cmake --build .
    ```
 
-4. To create a container image for the application:
+3. To create a container image for the application:
    ```
    ./build.dist.sh
    ```
 
-5. Build the Docker image:
+4. Build the Docker image:
    ```
    docker build -t cpp_demo -f dockerfile.dist .
    ```
 
-6. Run the containerized application:
+5. Run the containerized application:
    ```
    docker run cpp_demo
    ```
+EOF_README
+
+echo "README.md created successfully!"
+EOF
+
+# Make the create_readme script executable
+chmod +x create_readme.sh
+
+# Execute the README creation directly inside the container
+echo "Creating README.md inside container..."
+distrobox enter $CONTAINER_NAME -- bash -c "$(cat create_readme.sh)"
+
+# Create README.md for the host script
+echo "Creating README.md for the host script..."
+cat > README.md << 'EOF'
+# C++ Development Environment Setup Script
+
+This script (`build_cpp_dev_env.sh`) sets up a complete C++ development environment using Distrobox.
+
+## Features
+
+- Checks if Distrobox is installed and installs it if necessary
+- Creates an Ubuntu 22.04 container
+- Installs development tools inside the container
+- Creates a C++ demo project in ~/Desktop/projects/cpp/cpp_demo
+- Logs all output to a timestamped log file
+
+## Usage
+
+1. Run the setup script:
+   ```
+   ./build_cpp_dev_env.sh
+   ```
+   
+   The script automatically logs all output to a file with the format:
+   ```
+   build_cpp_dev_env-YYYY-MM-DD-HH-MM-SS_Z.log
+   ```
+   where YYYY-MM-DD-HH-MM-SS_Z is the timestamp when the script was started.
+
+2. If something goes wrong and you need to clean up:
+   ```
+   ./build_cpp_dev_env.sh --cleanup
+   ```
+   This will stop and remove the distrobox container.
+
+3. After setup is complete, enter the container and navigate to the project:
+   ```
+   distrobox enter cpp_dev_env
+   cd ~/Desktop/projects/cpp/cpp_demo
+   ```
+
+4. See the project's README.md for more information on how to build and run the application.
 EOF
 
 echo "All files created successfully!"
