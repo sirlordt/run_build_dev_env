@@ -102,7 +102,47 @@ chmod +x setup_container.sh
 
 # Execute the setup commands directly inside the container
 echo "Setting up development environment inside container..."
-distrobox enter $CONTAINER_NAME -- bash -c "$(cat setup_container.sh)"
+distrobox enter $CONTAINER_NAME -- bash << 'EOF'
+# Update package lists
+echo "Updating package lists..."
+sudo apt update
+
+# Install basic development tools
+echo "Installing build-essential, git, mc, htop..."
+sudo apt install -y build-essential git mc htop python3-pip
+
+# Install Conan from pip3
+echo "Installing Conan package manager..."
+pip3 install conan
+
+# Install latest CMake
+echo "Installing latest CMake..."
+CMAKE_VERSION="3.28.3"
+wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh -O /tmp/cmake-install.sh
+chmod +x /tmp/cmake-install.sh
+sudo /tmp/cmake-install.sh --skip-license --prefix=/usr/local
+
+# Install VSCode
+echo "Installing Visual Studio Code..."
+sudo apt install -y software-properties-common apt-transport-https wget
+wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
+sudo apt update
+sudo apt install -y code
+
+# Create project directory structure
+echo "Creating project directory structure..."
+mkdir -p ~/Desktop/projects/cpp
+
+# Create C++ demo project
+echo "Creating C++ demo project..."
+mkdir -p ~/Desktop/projects/cpp/cpp_demo
+cd ~/Desktop/projects/cpp/cpp_demo
+
+# Generate Conan profile
+echo "Generating Conan profile..."
+conan profile detect
+EOF
 
 # Create a script for creating project files
 echo "Creating project files script..."
@@ -460,7 +500,7 @@ chmod +x create_project_files.sh
 
 # Execute the project files creation directly inside the container
 echo "Creating project files inside container..."
-distrobox enter $CONTAINER_NAME -- bash -c "$(cat create_project_files.sh)"
+distrobox enter $CONTAINER_NAME -- bash -c "cd ~/Desktop/projects/cpp/cpp_demo && $(cat create_project_files.sh | grep -v '#!/bin/bash' | grep -v 'set -e' | grep -v 'cd ~/Desktop/projects/cpp/cpp_demo')"
 
 # Make scripts executable inside the container
 echo "Making scripts executable inside container..."
@@ -609,7 +649,7 @@ chmod +x create_readme.sh
 
 # Execute the README creation directly inside the container
 echo "Creating README.md inside container..."
-distrobox enter $CONTAINER_NAME -- bash -c "$(cat create_readme.sh)"
+distrobox enter $CONTAINER_NAME -- bash -c "cd ~/Desktop/projects/cpp/cpp_demo && $(cat create_readme.sh | grep -v '#!/bin/bash' | grep -v 'set -e' | grep -v 'cd ~/Desktop/projects/cpp/cpp_demo')"
 
 # Create README.md for the host script
 echo "Creating README.md for the host script..."
