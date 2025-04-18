@@ -422,7 +422,7 @@ cat > .vscode/launch.json << EOF_LAUNCH
             "program": "\${workspaceFolder}/build/${BIN_NAME}",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "\${workspaceFolder}/build",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
