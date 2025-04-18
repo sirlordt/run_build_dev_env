@@ -4,6 +4,8 @@
 # Except for these scripts
 !build_cpp_dev_env.sh
 !run_build_dev_env.sh
+!README.md
+!README_ES.md
 
 # Ignore all directories
 */
