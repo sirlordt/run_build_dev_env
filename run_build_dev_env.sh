@@ -12,22 +12,24 @@ else
     exit 1
 fi
 
+
 # Check if --clear-logs is being passed
-if [[ "$*" == *"--clear-logs"* ]]; then
+#if [[ "$*" == *"--clear-logs"* ]]; then
     # Don't create a log file when clearing logs
-    echo "Running in clear-logs mode, no log file will be created."
-    ./$SCRIPT "$@"
+#    echo "Running in clear-logs mode, no log file will be created."
+#    ./$SCRIPT "$@"
     
     # Check if the build script was successful
-    if [ $? -eq 0 ]; then
-        echo "Log files cleared successfully."
-    else
-        echo "Failed to clear log files."
-    fi
-else
+#    if [ $? -eq 0 ]; then
+#        echo "Log files cleared successfully."
+#    else
+#        echo "Failed to clear log files."
+#    fi
+#else
     # Generate timestamp for log file
     TIMESTAMP=$(date "+%Y-%m-%d-%H-%M-%S_%z")
     LOG_FILE="${SCRIPT%.sh}-${TIMESTAMP}.log"
+    export LOG_FILE
 
     # Run the build script and capture output to both console and log file
     ./$SCRIPT "$@" 2>&1 | tee "$LOG_FILE"
@@ -38,4 +40,4 @@ else
     else
         echo "Build script failed. Check $LOG_FILE for details."
     fi
-fi
+#fi

@@ -6,6 +6,7 @@
 !run_build_dev_env.sh
 !README.md
 !README_ES.md
+!ChangeLog.md
 
 # Ignore all directories
 */

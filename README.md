@@ -1,14 +1,15 @@
 # C++ Development Environment Setup Script
 
-This script (`build_cpp_dev_env.sh`) sets up a complete C++ development environment using Distrobox.
+This script (`build_cpp_dev_env.sh`) sets up a complete C++ development environment using Distrobox with Docker support.
 
 ## Features
 
-- Checks if Distrobox is installed and installs it if necessary
-- Creates an Ubuntu 22.04 container
-- Installs development tools inside the container
+- Checks if Distrobox and Docker are installed and installs them if necessary
+- Creates an Ubuntu 22.04 container with Docker support
+- Installs development tools inside the container (including Docker)
 - Creates a C++ demo project in ~/Desktop/projects/cpp/cpp_demo
 - Logs all output to a timestamped log file
+- Provides Docker integration for containerizing your C++ applications
 
 ## Usage
 
@@ -61,7 +62,11 @@ This script (`build_cpp_dev_env.sh`) sets up a complete C++ development environm
 - `--container-name NAME`: Set the container name (default: cpp_dev_env)
 - `--remove-old-container`: Force remove the old container if it exists with the same name
 - `--clean-container-home`: Remove all files from container shared with host
-- No options: Set up the C++ development environment
+- No options: Set up the C++ development environment with Docker support
+
+## ChangeLog
+
+A [ChangeLog.md](ChangeLog.md) file is maintained to track changes to the project. Check it for details about the latest updates and improvements.
 
 ## Using the Wrapper Script
 
