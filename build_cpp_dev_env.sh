@@ -6,20 +6,37 @@
 # Set error handling
 set -e
 
+# Detect if running inside Distrobox container
+if [ -n "$DISTROBOX_ENTER_PATH" ]; then
+    echo "You are currently inside a Distrobox container."
+    echo "This script is designed to run only on the host operating system."
+    echo "Please type 'exit' an hit enter key to leave the container."
+    echo "Locate this script on the host filesystem, and try run again."
+    exit 1
+fi
+
 echo "Starting build_cpp_dev_env.sh at $(date)"
 
-USER_NAME="$(whoami)"
-export DOCKER_GID_HOST=$(getent group docker | cut -d: -f3)
+HOST_USER_NAME="$(whoami)"
+export HOST_DOCKER_GID=$(getent group docker | cut -d: -f3)
 
-# Default container name
+HOST_DOCKER_SOCKET_PATH="/var/run/docker.sock"
+
 CONTAINER_NAME="cpp_dev_env"
+CONTAINER_PROJECT_FOLDER="~/Desktop/projects/cpp/cpp_demo"
+CONTAINER_IMAGE_NAME="ubuntu:22.04"
+CONTAINER_HOME="/home/${HOST_USER_NAME}/Desktop/distrobox/containers/home/${CONTAINER_NAME}"
+export CONTAINER_DOCKER_SOCKET_PATH="/run/host_docker.sock"
 
 # Function to clean up if something goes wrong
 cleanup() {
-    echo "Cleaning up distrobox environment..."
-    distrobox stop $CONTAINER_NAME 2>/dev/null || true
-    distrobox rm $CONTAINER_NAME 2>/dev/null || true
-    echo "Cleanup completed."
+  if [ ! -d "$CONTAINER_HOME" ]; then
+    mkdir -p "$CONTAINER_HOME"
+  fi    
+  echo "Cleaning up distrobox environment..."
+  distrobox stop -Y $CONTAINER_NAME > /dev/null 2>&1 || true
+  distrobox rm -f $CONTAINER_NAME > /dev/null 2>&1 || true
+  echo "Cleanup completed."
 }
 
 # Function to clean log files
@@ -148,25 +165,122 @@ check_and_install_distrobox_in_host() {
     echo "Checking if Distrobox is installed on the host..."
 
     if command -v distrobox &>/dev/null; then
-        echo "Distrobox is already installed."
-    else 
-        echo "Distrobox not found. Attempting to install..."
-        
-        # Check package manager
-        if command -v apt &> /dev/null; then
-            echo "Detected apt package manager. Installing distrobox..."
-            sudo apt update
-            sudo apt install -y distrobox
-        elif command -v dnf &> /dev/null; then
-            echo "Detected dnf package manager. Installing distrobox..."
-            sudo dnf install -y distrobox
-        elif command -v rpm &> /dev/null; then
-            echo "Detected rpm-based system. Installing distrobox..."
-            sudo rpm -i https://github.com/89luca89/distrobox/releases/latest/download/distrobox.rpm
+        # Check installed version
+        INSTALLED_VERSION=$(distrobox --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$INSTALLED_VERSION" ]; then
+            MAJOR_VERSION=$(echo "$INSTALLED_VERSION" | cut -d. -f1)
+            MINOR_VERSION=$(echo "$INSTALLED_VERSION" | cut -d. -f2)
+            
+            echo "Distrobox version $INSTALLED_VERSION is installed."
+            
+            # Check if version is less than 1.8.0
+            if [ "$MAJOR_VERSION" -lt 1 ] || ([ "$MAJOR_VERSION" -eq 1 ] && [ "$MINOR_VERSION" -lt 8 ]); then
+                echo "WARNING: Distrobox versions below 1.8.0 have issues with the 'distrobox rm -f' command."
+                echo "This may cause the script to hang. Consider upgrading to version 1.8.0 or higher."
+            fi
         else
-            echo "Error: Could not determine package manager. Please install distrobox manually."
-            exit 1
+            echo "Distrobox is installed, but couldn't determine version."
         fi
+        return
+    fi
+
+    echo "Distrobox not found. Attempting to install..."
+    
+    # Check package manager
+    if command -v apt &> /dev/null; then
+        echo "Detected apt package manager."
+        
+        # Check if distrobox is available in the repository and its version
+        sudo apt update
+        AVAILABLE_VERSION=$(apt-cache policy distrobox 2>/dev/null | grep Candidate | awk '{print $2}')
+        
+        if [ -n "$AVAILABLE_VERSION" ]; then
+            # Extract version number for comparison
+            MAJOR_VERSION=$(echo "$AVAILABLE_VERSION" | cut -d. -f1)
+            MINOR_VERSION=$(echo "$AVAILABLE_VERSION" | cut -d. -f2)
+            
+            echo "Found distrobox version $AVAILABLE_VERSION in repository."
+            
+            # Check if version is greater than or equal to 1.8.0
+            if [ "$MAJOR_VERSION" -gt 1 ] || ([ "$MAJOR_VERSION" -eq 1 ] && [ "$MINOR_VERSION" -ge 8 ]); then
+                echo "Installing distrobox from official repository..."
+                sudo apt install -y distrobox
+            else
+                echo "Repository version is older than 1.8.0. Installing from Debian package..."
+                wget -q https://ftp.debian.org/debian/pool/main/d/distrobox/distrobox_1.8.1.2-1_all.deb -O /tmp/distrobox.deb
+                sudo dpkg -i /tmp/distrobox.deb
+                # Install dependencies if needed
+                sudo apt install -f -y
+                rm -f /tmp/distrobox.deb
+            fi
+        else
+            echo "Distrobox not found in repository. Installing from Debian package..."
+            wget -q https://ftp.debian.org/debian/pool/main/d/distrobox/distrobox_1.8.1.2-1_all.deb -O /tmp/distrobox.deb
+            sudo dpkg -i /tmp/distrobox.deb
+            # Install dependencies if needed
+            sudo apt install -f -y
+            rm -f /tmp/distrobox.deb
+        fi
+    elif command -v dnf &> /dev/null; then
+        echo "Detected dnf package manager."
+        
+        # Check if distrobox is available in the repository and its version
+        AVAILABLE_VERSION=$(dnf info distrobox 2>/dev/null | grep Version | awk '{print $3}')
+        
+        if [ -n "$AVAILABLE_VERSION" ]; then
+            # Extract version number for comparison
+            MAJOR_VERSION=$(echo "$AVAILABLE_VERSION" | cut -d. -f1)
+            MINOR_VERSION=$(echo "$AVAILABLE_VERSION" | cut -d. -f2)
+            
+            echo "Found distrobox version $AVAILABLE_VERSION in repository."
+            
+            # Check if version is greater than or equal to 1.8.0
+            if [ "$MAJOR_VERSION" -gt 1 ] || ([ "$MAJOR_VERSION" -eq 1 ] && [ "$MINOR_VERSION" -ge 8 ]); then
+                echo "Installing distrobox from official repository..."
+                sudo dnf install -y distrobox
+            else
+                echo "WARNING: Repository version is older than 1.8.0."
+                echo "Versions below 1.8.0 have issues with the 'distrobox rm -f' command, which may cause the script to hang."
+                echo "Installing anyway, but consider upgrading later..."
+                sudo dnf install -y distrobox
+            fi
+        #else
+        #    echo "Distrobox not found in repository. Installing from GitHub release..."
+        #    wget -q https://github.com/89luca89/distrobox/releases/download/1.8.1/distrobox-1.8.1-1.noarch.rpm -O /tmp/distrobox.rpm
+        #    sudo rpm -i /tmp/distrobox.rpm
+        #    rm -f /tmp/distrobox.rpm
+        fi
+    #elif command -v rpm &> /dev/null; then
+    #    echo "Detected rpm-based system."
+    #    echo "Installing distrobox 1.8.1 from GitHub release..."
+    #    wget -q https://github.com/89luca89/distrobox/releases/download/1.8.1/distrobox-1.8.1-1.noarch.rpm -O /tmp/distrobox.rpm
+    #    sudo rpm -i /tmp/distrobox.rpm
+    #    rm -f /tmp/distrobox.rpm
+    else
+        echo "Error: Could not determine package manager. Please install distrobox manually."
+        exit 1
+    fi
+    
+    # Verify installation
+    if command -v distrobox &>/dev/null; then
+        INSTALLED_VERSION=$(distrobox --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$INSTALLED_VERSION" ]; then
+            echo "Distrobox version $INSTALLED_VERSION installed successfully."
+            
+            # Check if version is less than 1.8.0
+            MAJOR_VERSION=$(echo "$INSTALLED_VERSION" | cut -d. -f1)
+            MINOR_VERSION=$(echo "$INSTALLED_VERSION" | cut -d. -f2)
+            
+            if [ "$MAJOR_VERSION" -lt 1 ] || ([ "$MAJOR_VERSION" -eq 1 ] && [ "$MINOR_VERSION" -lt 8 ]); then
+                echo "WARNING: Distrobox versions below 1.8.0 have issues with the 'distrobox rm -f' command."
+                echo "This may cause the script to hang. Consider upgrading to version 1.8.0 or higher."
+            fi
+        else
+            echo "Distrobox installed successfully, but couldn't determine version."
+        fi
+    else
+        echo "Error: Failed to install distrobox."
+        exit 1
     fi
 }
 
@@ -175,6 +289,7 @@ DO_CLEANUP=false
 DO_CLEAN_LOGS=false
 DO_REMOVE_OLD_CONTAINER=false
 DO_CLEAN_CONTAINER_HOME=false
+DO_SETUP=true #By default try to setup
 VALID_ARGS=false
 
 # Process all arguments
@@ -196,6 +311,10 @@ while [ $# -gt 0 ]; do
             ;;
         --clean-container-home)
             DO_CLEAN_CONTAINER_HOME=true
+            shift
+            ;;
+        --no-setup)
+            DO_SETUP=false
             shift
             ;;
         --container-name)
@@ -226,6 +345,11 @@ if [ "$DO_CLEAN_LOGS" = true ]; then
     clean_logs
 fi
 
+# Execute requested actions
+if [ "$DO_CLEAN_CONTAINER_HOME" = true ]; then
+    clean_container_home "$CONTAINER_HOME"
+fi
+
 # Exit if any action was performed
 if [ "$VALID_ARGS" = true ]; then
     exit 0
@@ -237,222 +361,271 @@ check_and_install_docker_in_host
 
 check_and_install_distrobox_in_host
 
-IMAGE_NAME="ubuntu:22.04"
-CONTAINER_HOME="/home/${USER_NAME}/Desktop/distrobox/containers/home/${CONTAINER_NAME}"
+if [ "$DO_SETUP" = true ]; then
 
-# Execute requested actions
-if [ "$DO_CLEAN_CONTAINER_HOME" = true ]; then
+  echo "Current user running this script: $HOST_USER_NAME"
 
-    clean_container_home "$CONTAINER_HOME"
+  HOST_FOLDERS=( 
+    "Desktop"
+    "Downloads"
+    "Documents"
+    "Music"
+    "Pictures"
+    "Videos"
+    ".ssh"
+  )
+
+  ADDITIONAL_FLAGS=()
+
+  for folder in "${HOST_FOLDERS[@]}"; do
+    HOST_PATH="$HOME/$folder"
+    #CONTAINER_PATH="/home/$HOST_USER_NAME/$folder"
+    CONTAINER_PATH="$CONTAINER_HOME/$folder"
+
+    if [ -e "$HOST_PATH" ]; then
+        echo "Mounting $folder"
+        ADDITIONAL_FLAGS+=( "--additional-flags" "--volume $HOST_PATH:$CONTAINER_PATH" )
+    else
+        echo "$folder does not exist, skipping"
+    fi
+  done
+
+  echo "In the host enviroment HOST_DOCKER_GID: $HOST_DOCKER_GID"
+
+  if [ -S $HOST_DOCKER_SOCKET_PATH ]; then
+
+    #if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    #   docker rm -f -v $CONTAINER_NAME 2>/dev/null || true
+    #fi
+
+    CURRENT_PERMS=$(stat -c "%a" "$HOST_DOCKER_SOCKET_PATH")
+    if [ "$CURRENT_PERMS" != "666" ]; then
+        echo "Setting host Docker socket to 0666..."
+        sudo chmod 666 "$HOST_DOCKER_SOCKET_PATH"
+    else
+        echo "Docker socket already has 0666 permissions, skipping chmod."
+    fi
+
+    echo "Mapping Docker socket from host to container in $CONTAINER_DOCKER_SOCKET_PATH..."
+    ADDITIONAL_FLAGS+=( "--additional-flags" "--volume /var/run/docker.sock:$CONTAINER_DOCKER_SOCKET_PATH" )
+    ADDITIONAL_FLAGS+=( "--additional-flags" "--env HOST_DOCKER_GID=$HOST_DOCKER_GID" )
+    ADDITIONAL_FLAGS+=( "--additional-flags" "--env DOCKER_SOCKET=$CONTAINER_DOCKER_SOCKET_PATH" )
+    ADDITIONAL_FLAGS+=( "--additional-flags" "--env CONTAINER_PROJECT_FOLDER=$CONTAINER_PROJECT_FOLDER" )
+  else
+    echo "Docker socket not found at $HOST_DOCKER_SOCKET_PATH"
+  fi
+
+  # Create the container with each --additional-flags passed separately
+  echo "Creating Ubuntu 22.04 container named $CONTAINER_NAME..."
+  distrobox create \
+    --name "$CONTAINER_NAME" \
+    --image "$CONTAINER_IMAGE_NAME" \
+    --home "$CONTAINER_HOME" \
+    "${ADDITIONAL_FLAGS[@]}" \
+    --yes
+
+  # Prepare to set up the development environment inside the container
+  echo "Set up development environment inside container..."
+
+  # Execute the setup commands directly inside the container
+  echo "Setting up development environment inside container..."
+  distrobox enter $CONTAINER_NAME -- bash << 'EOF'
+    # Set non-interactive frontend to avoid any UI prompts
+    export DEBIAN_FRONTEND=noninteractive
+
+    if [ -z "$HOST_DOCKER_GID" ]; then
+        echo "Warning: HOST_DOCKER_GID is empty!"
+    else
+        echo "In the container environment HOST_DOCKER_GID: $HOST_DOCKER_GID"
+    fi
+
+    # Ensure DOCKER_SOCKET has a default value in case --env didn't work
+    # Note: We use the hardcoded path here because this is inside a single-quoted heredoc
+    # which doesn't allow variable expansion. The value matches CONTAINER_DOCKER_SOCKET_PATH.
+    export DOCKER_SOCKET="${DOCKER_SOCKET:-/run/host_docker.sock}"
+
+    # Check if the docker group exists
+    if getent group docker >/dev/null; then
+        CONTAINER_DOCKER_GID=$(getent group docker | cut -d: -f3)
+        echo "Group 'docker' exists with GID $CONTAINER_DOCKER_GID"
+
+        if [ "$CONTAINER_DOCKER_GID" != "$HOST_DOCKER_GID" ]; then
+            echo "GID mismatch detected, deleting and recreating 'docker' group with GID $HOST_DOCKER_GID"
+            sudo groupdel docker
+            sudo groupadd -g "$HOST_DOCKER_GID" docker
+        else
+            echo "Group 'docker' already has the correct GID."
+        fi
+    else
+        echo "Group 'docker' does not exist, creating it with GID $HOST_DOCKER_GID"
+        sudo groupadd -g "$HOST_DOCKER_GID" docker
+    fi
+
+    # Add current user to the docker group
+    sudo usermod -aG docker "$USER"
+
+    # Update package lists
+    echo "Updating package lists..."
+    sudo apt update
+
+    # Install basic development tools
+    echo "Installing build-essential, git, mc, htop..."
+    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext
+
+    # Install Docker from the official Docker repository
+    echo "Installing Docker from the official Docker repository..."
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+    echo \
+    "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    sudo apt update
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Add current user to the docker group
+    sudo usermod -aG docker $USER
+
+    echo "Checking Docker socket at: $DOCKER_SOCKET"
+    # Check Docker socket permissions inside the container
+    if [ -n "$DOCKER_SOCKET" ] && [ -S "$DOCKER_SOCKET" ]; then
+        echo "Docker socket is mounted at: $DOCKER_SOCKET"
+        echo "Socket info:"
+        ls -l "$DOCKER_SOCKET"
+
+        echo "Testing Docker access..."
+        if docker ps &>/dev/null; then
+            echo "Docker is accessible from inside the container."
+        else
+            echo "Docker is NOT accessible from inside the container. You may have permission issues."
+            echo "Suggestion: Ensure the socket has permissions (666) and your user is in the 'docker' group."
+
+            echo "Attempting to set permissions on Docker socket: $DOCKER_SOCKET"
+            sudo chmod 666 "$DOCKER_SOCKET" || echo "Warning: Could not chmod Docker socket"
+        fi
+    else
+        echo "Docker socket not found at $DOCKER_SOCKET"
+    fi
+
+    # Install Conan from pip3
+    echo "Installing Conan package manager..."
+    sudo pip3 install conan 
+
+    # Generate Conan profile
+    echo "Generating Conan profile..."
+    conan profile detect
+
+    # Install latest CMake
+    echo "Installing latest CMake..."
+    CMAKE_VERSION="3.28.3"
+    wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh -O /tmp/cmake-install.sh
+    chmod +x /tmp/cmake-install.sh
+    sudo /tmp/cmake-install.sh --skip-license --prefix=/usr/local
+
+    # Add /usr/local/bin to PATH
+    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.profile
+    source ~/.bashrc
+    echo "Added /usr/local/bin to PATH"
+
+    # Install VSCode
+    echo "Installing Visual Studio Code..."
+    sudo apt install -y software-properties-common apt-transport-https wget
+    wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
+    # Add -y flag to add-apt-repository to avoid interactive prompt
+    sudo add-apt-repository -y "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
+    echo "code code/add-microsoft-repo boolean true" | sudo debconf-set-selections
+    sudo apt update
+    sudo apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" code
+
+    # Export VSCode to the host system
+    #echo "Exporting VSCode to the host system..."
+    #distrobox-export --app code
+
+    #Force to use the code app inside of container
+    echo 'alias code="/usr/bin/code"' >> ~/.bashrc
+    source ~/.bashrc
+
+    # Clean project folder
+    if [ -n "$CONTAINER_PROJECT_FOLDER" ] &&
+       [ "$CONTAINER_PROJECT_FOLDER" != "/" ] &&
+       [ "$CONTAINER_PROJECT_FOLDER" != "/home" ] &&
+       [ "$CONTAINER_PROJECT_FOLDER" != "$HOME" ] &&
+       [ -d "$CONTAINER_PROJECT_FOLDER" ]; then
+        echo "Cleaning previous project directory: $CONTAINER_PROJECT_FOLDER"
+        rm -rf "$CONTAINER_PROJECT_FOLDER"
+    fi
+EOF
 
 fi
-
-echo "Current user running this script: $USER_NAME"
-
-HOST_FOLDERS=(
-  "Desktop"
-  "Downloads"
-  "Documents"
-  "Music"
-  "Pictures"
-  "Videos"
-  ".ssh"
-)
-
-ADDITIONAL_FLAGS=()
-
-for folder in "${HOST_FOLDERS[@]}"; do
-  HOST_PATH="$HOME/$folder"
-  #CONTAINER_PATH="/home/$USER_NAME/$folder"
-  CONTAINER_PATH="$CONTAINER_HOME/$folder"
-
-  if [ -e "$HOST_PATH" ]; then
-    echo "Mounting $folder"
-    ADDITIONAL_FLAGS+=( "--additional-flags" "--volume $HOST_PATH:$CONTAINER_PATH" )
-  else
-    echo "$folder does not exist, skipping"
-  fi
-done
-
-echo "In the host enviroment DOCKER_GID_HOST: $DOCKER_GID_HOST"
-
-export SOCKET_MOUNT_PATH="/run/host_docker.sock"
-
-DOCKER_SOCK="/var/run/docker.sock"
-
-if [ -S $DOCKER_SOCK ]; then
-
-  CURRENT_PERMS=$(stat -c "%a" "$DOCKER_SOCK")
-  if [ "$CURRENT_PERMS" != "666" ]; then
-    echo "Setting host Docker socket to 0666..."
-    sudo chmod 666 "$DOCKER_SOCK"
-  else
-    echo "Docker socket already has 0666 permissions, skipping chmod."
-  fi
-
-  echo "Mapping Docker socket from host to $SOCKET_MOUNT_PATH..."
-  ADDITIONAL_FLAGS+=( "--additional-flags" "--volume /var/run/docker.sock:$SOCKET_MOUNT_PATH" )
-  ADDITIONAL_FLAGS+=( "--additional-flags" "--env DOCKER_GID_HOST=$DOCKER_GID_HOST" )
-  ADDITIONAL_FLAGS+=( "--additional-flags" "--env DOCKER_SOCKET=$SOCKET_MOUNT_PATH" )
-else
-  echo "Docker socket not found at $DOCKER_SOCK"
-fi
-
-# Create the container with each --additional-flags passed separately
-echo "Creating Ubuntu 22.04 container named $CONTAINER_NAME..."
-distrobox create \
-  --name "$CONTAINER_NAME" \
-  --image "$IMAGE_NAME" \
-  --home "$CONTAINER_HOME" \
-  "${ADDITIONAL_FLAGS[@]}" \
-  --yes
-
-#--home "/home/$USER_NAME" \
-
-# Prepare to set up the development environment inside the container
-echo "Preparing to set up development environment inside container..."
 
 # Execute the setup commands directly inside the container
 echo "Setting up development environment inside container..."
-distrobox enter $CONTAINER_NAME -- bash << 'EOF'
-# Set non-interactive frontend to avoid any UI prompts
-export DEBIAN_FRONTEND=noninteractive
 
-if [ -z "$DOCKER_GID_HOST" ]; then
-    echo "Warning: DOCKER_GID_HOST is empty!"
-else
-    echo "In the container environment DOCKER_GID_HOST: $DOCKER_GID_HOST"
-fi
-
-echo "Inside container environment, DOCKER_GID_HOST: $DOCKER_GID_HOST"
-
-# Ensure DOCKER_SOCKET has a default value in case --env didn't work
-export DOCKER_SOCKET="${DOCKER_SOCKET:-/run/host_docker.sock}"
-
-# Check if the docker group exists
-if getent group docker >/dev/null; then
-    DOCKER_GID_CONTAINER=$(getent group docker | cut -d: -f3)
-    echo "Group 'docker' exists with GID $DOCKER_GID_CONTAINER"
-
-    if [ "$DOCKER_GID_CONTAINER" != "$DOCKER_GID_HOST" ]; then
-        echo "GID mismatch detected, deleting and recreating 'docker' group with GID $DOCKER_GID_HOST"
-        sudo groupdel docker
-        sudo groupadd -g "$DOCKER_GID_HOST" docker
-    else
-        echo "Group 'docker' already has the correct GID."
-    fi
-else
-    echo "Group 'docker' does not exist, creating it with GID $DOCKER_GID_HOST"
-    sudo groupadd -g "$DOCKER_GID_HOST" docker
-fi
-
-# Add current user to the docker group
-sudo usermod -aG docker "$USER"
-
-# Update package lists
-echo "Updating package lists..."
-sudo apt update
-
-# Install basic development tools
-echo "Installing build-essential, git, mc, htop..."
-sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates
-
-# Install Docker from the official Docker repository
-echo "Installing Docker from the official Docker repository..."
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Add current user to the docker group
-sudo usermod -aG docker $USER
-
-echo "Checking Docker socket at: $DOCKER_SOCKET"
-# Check Docker socket permissions inside the container
-if [ -n "$DOCKER_SOCKET" ] && [ -S "$DOCKER_SOCKET" ]; then
-    echo "Docker socket is mounted at: $DOCKER_SOCKET"
-    echo "Socket info:"
-    ls -l "$DOCKER_SOCKET"
-
-    echo "Testing Docker access..."
-    if docker ps &>/dev/null; then
-        echo "Docker is accessible from inside the container."
-    else
-        echo "Docker is NOT accessible from inside the container. You may have permission issues."
-        echo "Suggestion: Ensure the socket has permissions (666) and your user is in the 'docker' group."
-
-        echo "Attempting to set permissions on Docker socket: $DOCKER_SOCKET"
-        sudo chmod 666 "$DOCKER_SOCKET" || echo "Warning: Could not chmod Docker socket"
-    fi
-else
-    echo "Docker socket not found at $DOCKER_SOCKET"
-fi
-
-# Install Conan from pip3
-echo "Installing Conan package manager..."
-sudo pip3 install conan 
-
-# Generate Conan profile
-echo "Generating Conan profile..."
-conan profile detect
-
-# Install latest CMake
-echo "Installing latest CMake..."
-CMAKE_VERSION="3.28.3"
-wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh -O /tmp/cmake-install.sh
-chmod +x /tmp/cmake-install.sh
-sudo /tmp/cmake-install.sh --skip-license --prefix=/usr/local
-
-# Add /usr/local/bin to PATH
-echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
-echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.profile
-source ~/.bashrc
-echo "Added /usr/local/bin to PATH"
-
-# Install VSCode
-echo "Installing Visual Studio Code..."
-sudo apt install -y software-properties-common apt-transport-https wget
-wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -
-# Add -y flag to add-apt-repository to avoid interactive prompt
-sudo add-apt-repository -y "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main"
-echo "code code/add-microsoft-repo boolean true" | sudo debconf-set-selections
-sudo apt update
-sudo apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" code
-
-# Export VSCode to the host system
-echo "Exporting VSCode to the host system..."
-#distrobox-export --app code
-
-#Force to use the code app inside of container
-echo 'alias code="/usr/bin/code"' >> ~/.bashrc
-source ~/.bashrc
-
-# Limpieza opcional del directorio anterior si existe
-TARGET_DIR=~/Desktop/projects/cpp/cpp_demo
-if [ -d "$TARGET_DIR" ]; then
-    echo "Cleaning previous project directory: $TARGET_DIR"
-    rm -rf "$TARGET_DIR"
-fi
-
+#*************************************
+# Create project directory
+#*************************************
+distrobox enter $CONTAINER_NAME -- bash << EOF
 # Create C++ demo project
 echo "Creating C++ demo project..."
-mkdir -p ~/Desktop/projects/cpp/cpp_demo
+mkdir -p $CONTAINER_PROJECT_FOLDER
 EOF
 
-# Create project files directly inside the container
-echo "Creating project files inside container..."
-distrobox enter $CONTAINER_NAME -- bash << 'EOF'
-cd ~/Desktop/projects/cpp/cpp_demo
+# Read the content of the scripts from host
+BUILD_DIST_CONTENT=$(cat "$(dirname "$0")/build.dist.sh")
 
+#*************************************
+# Create build.dist.sh
+#*************************************
+echo "Creating build.dist.sh script..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > build.dist.sh << 'EOF_DIST_SH'
+$BUILD_DIST_CONTENT
+EOF_DIST_SH
+chmod +x build.dist.sh
+echo "build.dist.sh created and made executable."
+EOF
+
+BUILD_CONTENT=$(cat "$(dirname "$0")/build.sh")
+
+#*************************************
+# Create build.sh
+#*************************************
+echo "Creating build.sh script..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > build.sh << 'EOF_BUILD'
+$BUILD_CONTENT
+EOF_BUILD
+chmod +x build.sh
+echo "build.sh created and made executable."
+EOF
+
+HELPER_CONTENT=$(cat "$(dirname "$0")/helper.sh")
+
+#*************************************
+# Create helper.sh
+#*************************************
+echo "Creating helper.sh script..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > helper.sh << 'EOF_HELPER'
+$HELPER_CONTENT
+EOF_HELPER
+chmod +x helper.sh
+echo "helper.sh created and made executable."
+EOF
+
+#*************************************
 # Create main.cpp
+#*************************************
 echo "Creating main.cpp..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > main.cpp << 'EOF_CPP'
 #include <iostream>
 #include <string>
@@ -473,9 +646,14 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 EOF_CPP
+EOF
 
+#*************************************
 # Create CMakeLists.txt
+#*************************************
 echo "Creating CMakeLists.txt..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > CMakeLists.txt << 'EOF_CMAKE'
 cmake_minimum_required(VERSION 3.15)
 project(cpp_demo VERSION 0.1.0 LANGUAGES CXX)
@@ -486,32 +664,37 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Load binary name from .dist_build
 file(STRINGS ".dist_build" DIST_BUILD_CONTENT)
-foreach(LINE ${DIST_BUILD_CONTENT})
+foreach(LINE \${DIST_BUILD_CONTENT})
     if(LINE MATCHES "^Container_Bin_Name=\"([^\"]+)\"$")
-        set(APP_BIN_NAME ${CMAKE_MATCH_1})
+        set(APP_BIN_NAME \${CMAKE_MATCH_1})
     endif()
 endforeach()
 
 if(NOT DEFINED APP_BIN_NAME)
     set(APP_BIN_NAME "cpp_demo")
-    message(WARNING "Container_Bin_Name not found in .dist_build, using default: ${APP_BIN_NAME}")
+    message(WARNING "Container_Bin_Name not found in .dist_build, using default: \${APP_BIN_NAME}")
 endif()
 
-message(STATUS "Building executable: ${APP_BIN_NAME}")
+message(STATUS "Building executable: \${APP_BIN_NAME}")
 
 # Find dependencies with Conan
-if(EXISTS "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
-    include("${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+if(EXISTS "\${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+    include("\${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
 endif()
 
-add_executable(${APP_BIN_NAME} main.cpp)
+add_executable(\${APP_BIN_NAME} main.cpp)
 
-install(TARGETS ${APP_BIN_NAME}
+install(TARGETS \${APP_BIN_NAME}
         DESTINATION bin)
 EOF_CMAKE
+EOF
 
+#*************************************
 # Create conanfile.txt
+#*************************************
 echo "Creating conanfile.txt..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > conanfile.txt << 'EOF_CONAN'
 [requires]
 fmt/9.1.0
@@ -520,42 +703,63 @@ fmt/9.1.0
 CMakeDeps
 CMakeToolchain
 EOF_CONAN
+EOF
 
+#*************************************
 # Create .env_dist file
+#*************************************
 echo "Creating .env_dist file..."
-cat > .env_dist << EOF_ENV
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > .env_dist << 'EOF_ENV'
 APP_NAME=cpp_demo
-APP_VERSION=\${YYYY-MM-DD-HH-MM-SS_Z}
+APP_VERSION=\${YYYY}-\${MM}-\${DD}-\${HH}-\${MM}-\${SS}_\${Z}
 DEBUG_MODE=true
 LOG_LEVEL=info
 BUILD_TYPE=Debug
 CONTAINER_NAME=\${Container_Bin_Name}
-BUILD_TIMESTAMP=\${YYYY-MM-DD-HH-MM-SS_Z}
+BUILD_TIMESTAMP=\${YYYY}-\${MM}-\${DD}-\${HH}-\${MM}-\${SS}_\${Z}
 INSTALL_PATH=\${Container_Bin_Path}
 EOF_ENV
+EOF
 
+#*************************************
 # Create .dist_build file
+#*************************************
 echo "Creating .dist_build file..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > .dist_build << 'EOF_DIST'
 Container_Name="cpp_demo"
 Container_Bin_Name="cpp_demo"
-Container_Bin_Path="/usr/local/bin/${Container_Bin_Name}"
+Container_Bin_Path="/usr/local/bin/\${Container_Bin_Name}/"
 Container_Description="my demo app for distro box"
 Container_Mantainer="dev1 <dev001@domain.com>;dev2 <dev2@domain.com>"
-Container_Tags="tag1,tag2,\${YYYY-MM-DD-HH-MM-SS_Z}"
+Container_Tags="latest;tag1;tag2;\${YYYY}-\${MM}-\${DD}-\${HH}-\${MM}-\${SS}_\${Z}"
+Container_Group="cpp_demo"
+Container_User="cpp_demo"
+Container_Group_Id=1000
+Container_User_Id=1000
+Container_App_Folders="\${Container_Bin_Path}/logs;\${Container_Bin_Path}/data/\${YYYY}-\${MM}-\${DD}-\${HH}-\${MM}-\${SS}_\${Z}"
 EOF_DIST
 
-BIN_NAME="cpp_demo"
-if [ -f .dist_build ]; then
-    BIN_NAME=$(awk -F'"' '/^Container_Bin_Name=/{print $2}' .dist_build)
-fi
+EOF
 
-# Create VSCode configuration
+#*************************************
+# Create VSCode configuration directory
+#*************************************
 echo "Creating VSCode configuration..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 mkdir -p .vscode
+EOF
 
+#*************************************
 # Create tasks.json
+#*************************************
 echo "Creating tasks.json..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > .vscode/tasks.json << 'EOF_TASKS'
 {
     "version": "2.0.0",
@@ -563,7 +767,7 @@ cat > .vscode/tasks.json << 'EOF_TASKS'
         {
             "label": "CMake: build",
             "type": "shell",
-            "command": "cd ${workspaceFolder}/build && cmake --build .",
+            "command": "cd \${workspaceFolder}/build && cmake --build .",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -572,12 +776,19 @@ cat > .vscode/tasks.json << 'EOF_TASKS'
     ]
 }
 EOF_TASKS
+EOF
 
+#*************************************
+# Create settings.json
+#*************************************
+echo "Creating settings.json..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > .vscode/settings.json << 'EOF_SETTINGS'
 {
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "cmake.configureOnOpen": true,
-    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.buildDirectory": "\${workspaceFolder}/build",
     "cmake.generator": "Ninja",
     "editor.formatOnSave": true,
     "files.associations": {
@@ -587,7 +798,14 @@ cat > .vscode/settings.json << 'EOF_SETTINGS'
     }
 }
 EOF_SETTINGS
+EOF
 
+#*************************************
+# Create extensions.json
+#*************************************
+echo "Creating extensions.json..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 cat > .vscode/extensions.json << 'EOF_EXTENSIONS'
 {
     "recommendations": [
@@ -601,8 +819,21 @@ cat > .vscode/extensions.json << 'EOF_EXTENSIONS'
     ]
 }
 EOF_EXTENSIONS
+EOF
 
-cat > .vscode/launch.json << EOF_LAUNCH
+#*************************************
+# Create launch.json
+#*************************************
+echo "Creating launch.json..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+
+BIN_NAME="cpp_demo"
+if [ -f .dist_build ]; then
+    BIN_NAME=\$(awk -F'"' '/^Container_Bin_Name=/{print \$2}' .dist_build)
+fi
+
+cat > .vscode/launch.json << 'EOF_LAUNCH'
 {
     "version": "0.2.0",
     "configurations": [
@@ -610,7 +841,7 @@ cat > .vscode/launch.json << EOF_LAUNCH
             "name": "Debug C++ Project",
             "type": "cppdbg",
             "request": "launch",
-            "program": "\${workspaceFolder}/build/${BIN_NAME}",
+            "program": "\${workspaceFolder}/build/\${BIN_NAME}",
             "args": [],
             "stopAtEntry": false,
             "cwd": "\${workspaceFolder}/build",
@@ -630,174 +861,14 @@ cat > .vscode/launch.json << EOF_LAUNCH
     ]
 }
 EOF_LAUNCH
-
-# Create build.dist.sh script
-echo "Creating build.dist.sh script..."
-cat > build.dist.sh << 'EOF_DIST_SH'
-#!/bin/bash
-
-# build.dist.sh
-# Script to generate a Dockerfile for the C++ demo application
-
-set -e
-
-echo "Generating Dockerfile for C++ demo application..."
-
-# Load variables from .dist_build
-if [ -f .dist_build ]; then
-    source .dist_build
-else
-    echo "Error: .dist_build file not found."
-    exit 1
-fi
-
-# Process variables
-TIMESTAMP=$(date "+%Y-%m-%d-%H-%M-%S_%z")
-PROCESSED_CONTAINER_BIN_PATH="$Container_Bin_Path"
-PROCESSED_CONTAINER_TAGS=$(echo "$Container_Tags" | sed "s|\${YYYY-MM-DD-HH-MM-SS_Z}|$TIMESTAMP|g")
-
-echo "Container Name: $Container_Name"
-echo "Binary Name: $Container_Bin_Name"
-echo "Binary Path: $PROCESSED_CONTAINER_BIN_PATH"
-echo "Tags: $PROCESSED_CONTAINER_TAGS"
-
-# Process .env_dist file
-if [ -f .env_dist ]; then
-    echo "Processing .env_dist file..."
-    ENV_VARS=""
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ -z "$line" || "$line" =~ ^# ]] && continue
-
-        key=$(echo "$line" | cut -d= -f1)
-        raw_value=$(echo "$line" | cut -d= -f2-)
-
-        # Expand variables manually
-        value=${raw_value//\$\{Container_Bin_Name\}/$Container_Bin_Name}
-        value=${value//\$\{Container_Bin_Path\}/$PROCESSED_CONTAINER_BIN_PATH}
-        value=${value//\$\{YYYY-MM-DD-HH-MM-SS_Z\}/$TIMESTAMP}
-
-        ENV_VARS+="ENV $key=$value"$'\n'
-    done < .env_dist
-else
-    echo "Warning: .env_dist file not found."
-    ENV_VARS=""
-fi
-
-# Build the project to detect dependencies
-echo "Building project to detect dependencies..."
-PROJECT_ROOT="$(pwd)"
-mkdir -p "$PROJECT_ROOT/build"
-cd "$PROJECT_ROOT/build"
-conan install "$PROJECT_ROOT" --output-folder=. --build=missing -s build_type=Debug
-cmake "$PROJECT_ROOT" -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
-cmake --build .
-
-# Detect dependencies (basic: libc6 + libgcc-s1 always included)
-echo "Detecting dependencies..."
-PACKAGES="ca-certificates libc6 libgcc-s1"
-CONTAINER_DEPS="libc6:$(dpkg-query -W -f='${Version}' libc6)"
-CONTAINER_DEPS+=";libgcc-s1:$(dpkg-query -W -f='${Version}' libgcc-s1)"
-
-# Show summary
-echo -e "\nRequired base packages:"
-echo "$CONTAINER_DEPS"
-echo ""
-
-# Generate Dockerfile
-echo "Generating dockerfile.dist..."
-cd ..
-
-cat > dockerfile.dist << EOF_DOCKERFILE
-# This file is generated by build.dist.sh script. Do not edit directly.
-# Generated on: $(date)
-FROM ubuntu:22.04
-
-LABEL description="$Container_Description"
-LABEL maintainer="$Container_Mantainer"
-LABEL tags="$PROCESSED_CONTAINER_TAGS"
-LABEL path="$PROCESSED_CONTAINER_BIN_PATH"
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends $PACKAGES && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-$ENV_VARS
-ENV Container_App_Dependencies="$CONTAINER_DEPS"
-
-RUN mkdir -p \$(dirname $PROCESSED_CONTAINER_BIN_PATH)
-COPY build/$Container_Bin_Name $PROCESSED_CONTAINER_BIN_PATH
-ENTRYPOINT ["$PROCESSED_CONTAINER_BIN_PATH"]
-EOF_DOCKERFILE
-
-echo "Dockerfile generated successfully: dockerfile.dist"
-echo "Building Docker image with: docker build -t $Container_Name -f dockerfile.dist ."
-docker build -t "$Container_Name" -f dockerfile.dist .
-
-# Parse and apply tags from Container_Tags
-IFS=',' read -ra TAG_ARRAY <<< "$PROCESSED_CONTAINER_TAGS"
-
-for tag in "${TAG_ARRAY[@]}"; do
-    clean_tag=$(echo "$tag" | sed 's|.*/||')  # solo deja la parte final después de la última "/"
-    echo "Tagging image: $Container_Name:$clean_tag"
-    docker tag "$Container_Name" "$Container_Name:$clean_tag"
-done
-
-if [ $? -eq 0 ]; then
-    echo "Docker image '$Container_Name' built successfully!"
-    echo "You can run the container with: docker run $Container_Name"
-else
-    echo "Error: Failed to build Docker image."
-fi
-EOF_DIST_SH
-
-# Create build.sh script
-echo "Creating build.sh script..."
-cat > build.sh << 'EOF_BUILD'
-#!/bin/bash
-
-# build.sh
-# Script to automate the build process for the C++ demo application
-
-set -e
-
-echo "Building C++ demo application..."
-
-# Create build directory if it doesn't exist
-mkdir -p build
-cd build
-
-# Generate Conan files
-echo "Generating Conan files..."
-conan install .. --output-folder=. --build=missing
-
-# Configure with CMake
-echo "Configuring with CMake..."
-cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
-
-# Build the project
-echo "Building the project..."
-cmake --build .
-
-echo "Build completed successfully!"
-
-# Get the binary name from .dist_build using a more precise method
-if [ -f "../.dist_build" ]; then
-    BIN_NAME=$(awk -F'"' '/^Container_Bin_Name=/{print $2}' ../.dist_build)
-else
-    BIN_NAME="cpp_demo"
-fi
-echo "You can run the application with: ./build/${BIN_NAME}"
-EOF_BUILD
-
-# Make scripts executable
-chmod +x build.dist.sh build.sh
 EOF
 
-# Create README.md for the project
+#*************************************
+# Create README.md
+#*************************************
 echo "Creating README.md inside container..."
-distrobox enter $CONTAINER_NAME -- bash << 'EOF'
-cd ~/Desktop/projects/cpp/cpp_demo
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
 
 cat > README.md << 'EOF_README'
 # C++ Development Environment with Distrobox
@@ -843,151 +914,13 @@ This script automates the build process for the C++ application:
 
 This script generates a Dockerfile for the C++ application and builds the Docker image:
 
-1. Processes variables from `.dist_build` and `.env_dist` files
+1. Processes variables from \`.dist_build\` and \`.env_dist\` files
 2. Builds the project to detect dependencies
-3. Analyzes dependencies to determine required packages and their versions
-4. Creates a special environment variable `Container_App_Dependencies` with the format `package:version;package:version`
-5. Generates a Dockerfile (`dockerfile.dist`) that:
-   - Installs only the necessary dependencies
-   - Sets environment variables including `Container_App_Dependencies`
-   - Copies the application to the specified path
-   - Sets the entrypoint
-6. Automatically builds the Docker image using the generated Dockerfile
-
-## Configuration Files
-
-### .dist_build
-
-Contains configuration for the container build:
-
-```
-Container_Name="cpp_demo"
-Container_Bin_Name="cpp_demo"
-Container_Bin_Path=/usr/local/bin/${Container_Bin_Name}
-Container_Description="my demo app for distro box"
-Container_Mantainer="dev1 <dev001@domain.com>;dev2 <dev2@domain.com>"
-Container_Tags="tag1,tag2,${YYYY-MM-DD-HH-MM-SS_Z}"
-```
-
-### .env_dist
-
-Contains environment variables to be set in the container:
-
-```
-APP_NAME=cpp_demo
-APP_VERSION=${YYYY-MM-DD-HH-MM-SS_Z}
-DEBUG_MODE=true
-LOG_LEVEL=info
-BUILD_TYPE=Debug
-CONTAINER_NAME=${Container_Bin_Name}
-BUILD_TIMESTAMP=${YYYY-MM-DD-HH-MM-SS_Z}
-INSTALL_PATH=${Container_Bin_Path}
-```
-
-## VSCode Configuration
-
-The project includes VSCode configuration for C++ development:
-
-- Debug configuration
-- CMake integration
-- Recommended extensions:
-  - C/C++ tools
-  - CMake tools
-  - Conan extension
-  - Cline extension
-
-## Usage
-
-1. Enter the Distrobox container:
-   ```
-   distrobox enter cpp_dev_env
-   ```
-
-2. Navigate to the project and build it:
-   ```
-   cd ~/Desktop/projects/cpp/cpp_demo
-   ./build.sh
-   ```
-   
-   Or manually:
-   ```
-   cd ~/Desktop/projects/cpp/cpp_demo
-   mkdir -p build && cd build
-   conan install .. --output-folder=. --build=missing
-   cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake
-   cmake --build .
-   ```
-
-3. To create a container image for the application and build it automatically:
-   ```
-   ./build.dist.sh
-   ```
-
-4. Run the containerized application:
-   ```
-   docker run cpp_demo
-   ```
-
-## Docker Support
-
-This environment comes with Docker Engine installed from the official Docker repository, allowing you to build and run Docker containers directly inside the Distrobox container. This setup provides several advantages:
-
-- Build Docker images for your C++ applications
-- Test containerized applications in isolation
-- Use Docker Compose for multi-container applications
-- Access Docker commands without needing to install Docker on your host system
-
-### Using Docker Inside the Container
-
-After entering the Distrobox container, you can use Docker commands as you normally would:
-
-```bash
-# Check Docker version
-docker --version
-
-# List Docker images
-docker images
-
-# Build an image (using the generated dockerfile.dist)
-docker build -t my_cpp_app -f dockerfile.dist .
-
-# Run a container
-docker run my_cpp_app
-
-# Use Docker Compose
-docker compose up
-```
-
-### Docker Compose Example
-
-You can create a `docker-compose.yml` file for more complex setups:
-
-```yaml
-version: '3'
-services:
-  cpp_app:
-    build:
-      context: .
-      dockerfile: dockerfile.dist
-    ports:
-      - "8080:8080"
-  database:
-    image: postgres:latest
-    environment:
-      POSTGRES_PASSWORD: example
-```
-
-Then run it with:
-```bash
-docker compose up
-```
-
-This setup allows you to develop C++ applications and containerize them all within the same development environment.
+3. Analyzes dependencies to determine required packages
+4. Generates a Dockerfile with only the necessary dependencies
+5. Builds and tags the Docker image
 EOF_README
-
-echo "README.md created successfully!"
 EOF
-
 
 echo "All files created successfully!"
 

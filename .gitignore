@@ -4,6 +4,10 @@
 # Except for these scripts
 !build_cpp_dev_env.sh
 !run_build_dev_env.sh
+!create_cpp_project_from_template.sh
+!build.sh
+!build.dist.sh
+!helper.sh
 !README.md
 !README_ES.md
 !ChangeLog.md
