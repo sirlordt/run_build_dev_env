@@ -55,6 +55,23 @@ Este script (`build_cpp_dev_env.sh`) configura un entorno de desarrollo C++ comp
 
 5. Consulta el README.md del proyecto para obtener más información sobre cómo compilar y ejecutar la aplicación.
 
+## Scripts del Proyecto
+
+Los siguientes scripts están diseñados para ser utilizados dentro del entorno Distrobox y en una carpeta de proyecto C++ (como cpp_demo) que es auto-generada por el script run_build_dev_env.sh:
+
+- **build.sh**: Automatiza el proceso de compilación de aplicaciones C++ dentro de la carpeta del proyecto. Maneja la configuración de CMake, la compilación y puede ser utilizado para ejecutar la aplicación.
+
+- **build.dist.sh**: Se utiliza para construir contenedores Docker a partir de tus aplicaciones C++. Este script crea un Dockerfile basado en tu proyecto y construye una imagen Docker que contiene tu aplicación.
+
+- **helper.sh**: Un script de utilidad para compilar, ejecutar e inspeccionar contenedores creados a partir de tu aplicación C++. Proporciona comandos convenientes para gestionar los contenedores Docker.
+
+- **create_cpp_project_from_template.sh**: Crea nuevos proyectos C++ a partir de plantillas. Este script puede ser utilizado para crear nuevos proyectos basados en existentes, facilitando el inicio de nuevas aplicaciones con una estructura consistente.
+
+Para utilizar estos scripts, debes:
+1. Estar dentro del contenedor Distrobox (`distrobox enter cpp_dev_env`)
+2. Navegar a una carpeta de proyecto C++ (por ejemplo, `cd ~/Desktop/projects/cpp/cpp_demo`)
+3. Ejecutar el script deseado (por ejemplo, `./build.sh`)
+
 ## Opciones para build_cpp_dev_env.sh
 
 - `--cleanup`: Limpia el entorno distrobox (detiene y elimina el contenedor)

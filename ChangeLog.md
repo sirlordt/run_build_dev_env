@@ -1,5 +1,25 @@
 # ChangeLog
 
+## 2025-04-19 20:02:00 (America/Los_Angeles, UTC-7:00)
+
+### Changed
+- Enhanced create_cpp_project_from_template.sh:
+  - Improved logging format for all operations (Create, Copy, Replace)
+  - Added temporary log file approach to prevent log corruption during replacements
+  - Modified Copy operations to show directory paths in From/To fields and filename in File field
+- Updated documentation:
+  - Added "Project Scripts" section to README.md and README_ES.md
+  - Clarified that build.sh, build.dist.sh, and helper.sh are meant to be used within Distrobox
+  - Explained that scripts should be used in C++ project folders like cpp_demo
+  - Added usage instructions for all project scripts
+
+### Fixed
+- Fixed logging issues in create_cpp_project_from_template.sh:
+  - Fixed incorrect From/To paths in Create operations
+  - Fixed incorrect From/To paths in Copy operations
+  - Fixed log file corruption during template name replacements
+  - Ensured consistent formatting across all operation types
+
 ## 2025-04-19 19:20:00 (America/Los_Angeles, UTC-7:00)
 
 ### Added
