@@ -582,6 +582,19 @@ EOF_ARGV
 
 echo "VSCode password-store configuration added to ~/.vscode/argv.json"
 
+# Set up VSCode Git configuration
+mkdir -p ~/.config/Code/User
+cat > ~/.config/Code/User/settings.json <<'EOF_SETTINGS'
+{
+  "git.enabled": false,
+  "git.useCredentialStore": false,
+  "git.autofetch": false,
+  "git.confirmSync": false
+}
+EOF_SETTINGS
+
+echo "VSCode Git configuration added to ~/.config/Code/User/settings.json"
+
 EOF
 
 #*************************************
