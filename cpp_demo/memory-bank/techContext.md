@@ -68,7 +68,7 @@ The development environment is set up using Distrobox, which provides a containe
   ```bash
   # Custom prompt for Distrobox container
   export CONTAINER_ID=1
-  export PS1="(\h) \u@\[\e[1;32m\]\$(hostname)\[\e[0m\]:\w\$ "
+  export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$ "
   ```
 - **Login Shell Setup**: Ensures .bashrc is sourced from .bash_profile
   ```bash

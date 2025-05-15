@@ -21,8 +21,8 @@ The current focus is on initializing the memory bank for the C++ Demo Applicatio
   - Disabled Git sync confirmation prompts
 - Added custom prompt configuration for Distrobox container:
   - Ensures .bashrc is sourced from .bash_profile for login shells
-  - Adds a custom prompt with container hostname in bright green
-  - Sets PS1 with format "(\h) \u@\hostname:\w\$"
+  - Adds a custom prompt with container ID in bright green
+  - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$"
   - Applies the new prompt immediately
 - Added nano to the list of installed packages for better text editing options
 - Enhanced launch.json processing in project creation:

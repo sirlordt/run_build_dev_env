@@ -253,3 +253,24 @@ This configuration is added to `~/.config/Code/User/settings.json` during contai
 - Prevent the use of credential store for Git
 - Disable automatic fetching of Git repositories
 - Disable confirmation prompts for Git sync operations
+
+#### Shell Configuration
+
+The environment configures a custom prompt for the Distrobox container:
+
+```bash
+# Custom prompt for Distrobox container
+export CONTAINER_ID=1
+export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$ "
+```
+
+This configuration is added to `~/.bashrc` during container setup to:
+- Display the container ID in bright green
+- Show the hostname in parentheses
+- Provide a clear visual indication that you're working inside a container
+
+The setup also ensures `.bashrc` is sourced from `.bash_profile` for login shells:
+
+```bash
+[[ -f ~/.bashrc ]] && source ~/.bashrc
+```

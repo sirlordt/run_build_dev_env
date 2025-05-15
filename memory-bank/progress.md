@@ -168,8 +168,8 @@ The memory bank documentation has been initialized to capture the project's purp
   - Disabled Git sync confirmation prompts
 - Added custom prompt configuration for Distrobox container:
   - Ensures .bashrc is sourced from .bash_profile for login shells
-  - Adds a custom prompt with container hostname in bright green
-  - Sets PS1 with format "(\h) \u@\hostname:\w\$"
+  - Adds a custom prompt with container ID in bright green
+  - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$"
   - Applies the new prompt immediately
 - Enhanced launch.json processing in create_cpp_project_from_template.sh:
   - Added proper commenting and uncommenting of program lines
