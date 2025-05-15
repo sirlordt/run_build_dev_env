@@ -470,7 +470,7 @@ if [ "$DO_SETUP" = true ]; then
 
     # Install basic development tools
     echo "Installing build-essential, git, mc, htop..."
-    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext
+    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext nano
 
     # Install Docker from the official Docker repository
     echo "Installing Docker from the official Docker repository..."
@@ -564,6 +564,25 @@ fi
 
 # Execute the setup commands directly inside the container
 echo "Setting up development environment inside container..."
+
+
+distrobox enter $CONTAINER_NAME -- bash << 'EOF'
+
+#*************************************
+# VSCode token store turn to basic
+#*************************************
+# Set up VSCode argv.json to use basic password-store
+VSCODE_ARGV_DIR="$HOME/.vscode"
+mkdir -p "$VSCODE_ARGV_DIR"
+cat > "$VSCODE_ARGV_DIR/argv.json" << 'EOF_ARGV'
+{
+  "password-store": "basic"
+}
+EOF_ARGV
+
+echo "VSCode password-store configuration added to ~/.vscode/argv.json"
+
+EOF
 
 #*************************************
 # Create project directory

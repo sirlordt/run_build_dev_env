@@ -147,6 +147,62 @@ find "$NEW_PROJECT_PATH" -type f | while read -r file; do
   fi
 done
 
+# Process launch.json file if it exists
+echo "Processing launch.json file if it exists..." | tee -a "$TEMP_LOG_FILE"
+LAUNCH_JSON_PATH="$NEW_PROJECT_PATH/.vscode/launch.json"
+if [[ -f "$LAUNCH_JSON_PATH" ]]; then
+  echo "Found launch.json file, processing program lines..." | tee -a "$TEMP_LOG_FILE"
+  
+  # 1. First, save the original template name to replace it correctly
+  TEMPLATE_PROGRAM_PATH="${workspaceFolder}/build/$TEMPLATE_NAME"
+  
+  # 2. Comment out all program lines that aren't already commented
+  sed -i 's|^\([[:space:]]*\)"program": "${workspaceFolder}/build/|//\1"program": "${workspaceFolder}/build/|g' "$LAUNCH_JSON_PATH"
+  log_operation "Modify" "Comment out all program lines" "" "${LAUNCH_JSON_PATH#$SCRIPT_DIR/}" "Success"
+  
+  # 3. Find the "request": "launch" line to add our new entries after it
+  request_line=$(grep -n '"request": "launch"' "$LAUNCH_JSON_PATH" | head -1 | cut -d: -f1)
+  if [[ -n "$request_line" ]]; then
+    # 4. Add the ${BIN_NAME} line after the request line
+    bin_name_exists=$(grep -q '//"program": "${workspaceFolder}/build/${BIN_NAME}"' "$LAUNCH_JSON_PATH" && echo "yes" || echo "no")
+    if [[ "$bin_name_exists" == "no" ]]; then
+      sed -i "${request_line}a\\            //\"program\": \"\${workspaceFolder}/build/\${BIN_NAME}\"," "$LAUNCH_JSON_PATH"
+      log_operation "Modify" "Add ${BIN_NAME} line" "" "${LAUNCH_JSON_PATH#$SCRIPT_DIR/}" "Success"
+    fi
+    
+    # 5. Add the project-specific program line at the very top (after request line)
+    sed -i "${request_line}a\\            \"program\": \"\${workspaceFolder}/build/$NEW_PROJECT_NAME\"," "$LAUNCH_JSON_PATH"
+    log_operation "Modify" "Add project-specific program line" "" "${LAUNCH_JSON_PATH#$SCRIPT_DIR/}" "Success"
+  fi
+  
+  # 6. Clean up any duplicate entries that might have been created
+  # Remove any duplicate project name entries (keeping only the first one)
+  first_project_line=$(grep -n "\"program\": \"\${workspaceFolder}/build/$NEW_PROJECT_NAME\"" "$LAUNCH_JSON_PATH" | head -1 | cut -d: -f1)
+  if [[ -n "$first_project_line" ]]; then
+    # Delete any other lines with the same project name
+    sed -i "$((first_project_line+1)),\$ {/\"program\": \"\${workspaceFolder}\/build\/$NEW_PROJECT_NAME\"/d}" "$LAUNCH_JSON_PATH"
+    # Delete any commented lines with the same project name
+    sed -i "1,\$ {/\/\/.*\"program\": \"\${workspaceFolder}\/build\/$NEW_PROJECT_NAME\"/d}" "$LAUNCH_JSON_PATH"
+    log_operation "Modify" "Clean up duplicate project name entries" "" "${LAUNCH_JSON_PATH#$SCRIPT_DIR/}" "Success"
+  fi
+  
+  # 7. Make sure the original template's program line is preserved but commented out
+  # First, check if the template line exists (either commented or uncommented)
+  template_line_exists=$(grep -q "\"program\": \"\${workspaceFolder}/build/$TEMPLATE_NAME\"" "$LAUNCH_JSON_PATH" || grep -q "//\"program\": \"\${workspaceFolder}/build/$TEMPLATE_NAME\"" "$LAUNCH_JSON_PATH" && echo "yes" || echo "no")
+  
+  if [[ "$template_line_exists" == "no" ]]; then
+    # Find the BIN_NAME line to add after it
+    bin_name_line=$(grep -n "//\"program\": \"\${workspaceFolder}/build/\${BIN_NAME}\"" "$LAUNCH_JSON_PATH" | head -1 | cut -d: -f1)
+    if [[ -n "$bin_name_line" ]]; then
+      # Add the template line after the BIN_NAME line
+      sed -i "${bin_name_line}a\\            //\"program\": \"\${workspaceFolder}/build/$TEMPLATE_NAME\"," "$LAUNCH_JSON_PATH"
+      log_operation "Modify" "Add template program line" "" "${LAUNCH_JSON_PATH#$SCRIPT_DIR/}" "Success"
+    fi
+  fi
+else
+  echo "launch.json file not found, skipping..." | tee -a "$TEMP_LOG_FILE"
+fi
+
 echo "Project '$NEW_PROJECT_NAME' created successfully!" | tee -a "$TEMP_LOG_FILE"
 
 # Copy the log file to the project directory
