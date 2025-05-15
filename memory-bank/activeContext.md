@@ -2,7 +2,7 @@
 
 ## Current Work Focus
 
-The current focus of the C++ Development Environment Setup project is on establishing the initial memory bank documentation to capture the project's purpose, architecture, and technical details. This documentation will serve as a foundation for future development and maintenance of the project.
+The current focus of the C++ Development Environment Setup project is on enhancing the development environment with AI assistant integration and improving the documentation to capture the project's purpose, architecture, and technical details. This documentation serves as a foundation for future development and maintenance of the project.
 
 The project itself is a set of scripts for setting up a C++ development environment using Distrobox with Docker support. The main components include:
 
@@ -11,6 +11,7 @@ The project itself is a set of scripts for setting up a C++ development environm
 3. **build.dist.sh**: Used for building Docker containers from C++ applications
 4. **helper.sh**: A utility script for building, running, and inspecting containers
 5. **create_cpp_project_from_template.sh**: Creates new C++ projects from templates
+6. **inject_cline_custom_instructions.sh**: Configures Claude AI assistant with custom instructions for maintaining project documentation
 
 ## Recent Changes
 
@@ -18,8 +19,18 @@ According to the git diff and ChangeLog.md, the most recent changes to the proje
 
 ### Staged Changes (Not Yet Committed)
 
+- Added new script **inject_cline_custom_instructions.sh**:
+  - Creates custom instructions for Claude AI assistant
+  - Configures Claude to maintain a "Memory Bank" of project documentation
+  - Sets up a structured approach to documentation with core files (projectbrief.md, productContext.md, etc.)
+  - Defines workflows for Plan Mode and Act Mode
+  - Establishes documentation update processes
+  - Uses SQLite to store configuration in VSCode's database
+
 - Enhanced build_cpp_dev_env.sh:
-  - Added `nano` to the list of installed packages
+  - Added `nano` and `sqlite3` and `jq` to the list of installed packages
+  - Added code to create and run inject_cline_custom_instructions.sh in the container
+  - Added CONTAINER_NAME to system-wide environment variables in /etc/environment
   - Added VSCode password-store configuration to use basic authentication
   - Added configuration to prevent credential prompts in VSCode
   - Added VSCode Git configuration to disable git features in the container:
@@ -27,19 +38,21 @@ According to the git diff and ChangeLog.md, the most recent changes to the proje
     - Disabled git credential store (`"git.useCredentialStore": false`)
     - Disabled git auto-fetch (`"git.autofetch": false`)
     - Disabled git confirmation for sync (`"git.confirmSync": false`)
+    - Added `"extensions.ignoreRecommendations": false` to allow extension recommendations
   - Added custom prompt configuration for Distrobox container:
     - Ensures .bashrc is sourced from .bash_profile for login shells
-    - Adds a custom prompt with container ID in bright green
-    - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$"
+    - Adds a custom prompt with container name in bright green
+    - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$"
     - Applies the new prompt immediately
 
-- Enhanced create_cpp_project_from_template.sh:
-  - Added extensive processing for launch.json file
-  - Improved handling of program paths in launch configuration
-  - Added proper commenting and uncommenting of program lines
-  - Added project-specific program line for debugging
-  - Added cleanup of duplicate entries in launch.json
-  - Preserved template program lines in commented form
+- Updated .gitignore:
+  - Added inject_cline_custom_instructions.sh to the list of tracked files
+
+- Enhanced VSCode integration:
+  - Improved tasks.json to use build.sh script for building
+  - Added auto-install extensions task that runs on folder open
+  - Improved launch.json creation with better binary name detection
+  - Added automatic VSCode extension installation
 
 ### 2025-04-19 20:02:00 (America/Los_Angeles, UTC-7:00)
 
@@ -112,27 +125,35 @@ The following are potential next steps for the project:
 
 ## Active Decisions and Considerations
 
-1. **Distrobox Version Requirements**:
+1. **AI Assistant Integration**:
+   - Claude AI assistant is configured with custom instructions for maintaining project documentation
+   - A "Memory Bank" structure is established for organizing documentation
+   - The assistant is instructed to read all memory bank files at the start of every task
+   - This approach ensures consistent documentation maintenance despite the assistant's memory limitations
+
+2. **Distrobox Version Requirements**:
    - The project recommends Distrobox version 1.8.0 or higher
    - Versions below 1.8.0 have issues with the 'distrobox rm -f' command
    - The script attempts to install a newer version if an older one is detected
 
-2. **Docker Socket Permissions**:
+3. **Docker Socket Permissions**:
    - The Docker socket is mounted from the host to the container
    - Permissions are set to 666 to ensure the container can access it
    - This approach is chosen for simplicity, though it has security implications
 
-3. **VSCode Integration**:
+4. **VSCode Integration**:
    - VSCode is installed inside the container rather than exported to the host
    - This ensures all extensions and configurations are contained within the environment
    - An alias is created to ensure the container's VSCode is used
+   - Claude extension (saoudrizwan.claude-dev) is included in the recommended extensions
+   - Automatic extension installation is configured to run when a folder is opened
 
-4. **Project Structure**:
+5. **Project Structure**:
    - The demo project uses a modern CMake structure
    - Conan is used for dependency management
    - The structure is designed to be a good starting point for new projects
 
-5. **Configuration Externalization**:
+6. **Configuration Externalization**:
    - Configuration is externalized in .dist_build and .env_dist files
    - This allows customization without modifying the scripts
    - The approach supports different project requirements

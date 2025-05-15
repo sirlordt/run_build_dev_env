@@ -407,10 +407,11 @@ if [ "$DO_SETUP" = true ]; then
     fi
 
     echo "Mapping Docker socket from host to container in $CONTAINER_DOCKER_SOCKET_PATH..."
-    ADDITIONAL_FLAGS+=( "--additional-flags" "--volume /var/run/docker.sock:$CONTAINER_DOCKER_SOCKET_PATH" )
-    ADDITIONAL_FLAGS+=( "--additional-flags" "--env HOST_DOCKER_GID=$HOST_DOCKER_GID" )
-    ADDITIONAL_FLAGS+=( "--additional-flags" "--env DOCKER_SOCKET=$CONTAINER_DOCKER_SOCKET_PATH" )
-    ADDITIONAL_FLAGS+=( "--additional-flags" "--env CONTAINER_PROJECT_FOLDER=$CONTAINER_PROJECT_FOLDER" )
+  ADDITIONAL_FLAGS+=( "--additional-flags" "--volume /var/run/docker.sock:$CONTAINER_DOCKER_SOCKET_PATH" )
+  ADDITIONAL_FLAGS+=( "--additional-flags" "--env HOST_DOCKER_GID=$HOST_DOCKER_GID" )
+  ADDITIONAL_FLAGS+=( "--additional-flags" "--env DOCKER_SOCKET=$CONTAINER_DOCKER_SOCKET_PATH" )
+  ADDITIONAL_FLAGS+=( "--additional-flags" "--env CONTAINER_PROJECT_FOLDER=$CONTAINER_PROJECT_FOLDER" )
+  ADDITIONAL_FLAGS+=( "--additional-flags" "--env CONTAINER_NAME=$CONTAINER_NAME" )
   else
     echo "Docker socket not found at $HOST_DOCKER_SOCKET_PATH"
   fi
@@ -470,7 +471,7 @@ if [ "$DO_SETUP" = true ]; then
 
     # Install basic development tools
     echo "Installing build-essential, git, mc, htop..."
-    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext nano
+    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext nano sqlite3 jq
 
     # Install Docker from the official Docker repository
     echo "Installing Docker from the official Docker repository..."
@@ -549,6 +550,15 @@ if [ "$DO_SETUP" = true ]; then
     echo 'alias code="/usr/bin/code"' >> ~/.bashrc
     source ~/.bashrc
 
+    # Add CONTAINER_NAME to system-wide environment variables
+    if [ -n "$CONTAINER_NAME" ]; then
+        echo "Adding CONTAINER_NAME to system-wide environment variables..."
+        echo "CONTAINER_NAME=$CONTAINER_NAME" | sudo tee -a /etc/environment
+        echo "CONTAINER_NAME has been added to /etc/environment"
+    else
+        echo "Warning: CONTAINER_NAME is not set, skipping system-wide environment variable setup"
+    fi
+
     # Clean project folder
     if [ -n "$CONTAINER_PROJECT_FOLDER" ] &&
        [ "$CONTAINER_PROJECT_FOLDER" != "/" ] &&
@@ -589,7 +599,8 @@ cat > ~/.config/Code/User/settings.json <<'EOF_SETTINGS'
   "git.enabled": false,
   "git.useCredentialStore": false,
   "git.autofetch": false,
-  "git.confirmSync": false
+  "git.confirmSync": false,
+  "extensions.ignoreRecommendations": false,
 }
 EOF_SETTINGS
 
@@ -612,8 +623,11 @@ if ! grep -q 'PS1.*hostname' "$BASHRC"; then
     cat >> "$BASHRC" << 'EOF_PROMPT'
 
 # Custom prompt for Distrobox container
-export CONTAINER_ID=1
-export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$ "
+# Make CONTAINER_NAME available as an environment variable
+if [ -z "$CONTAINER_NAME" ]; then
+    export CONTAINER_NAME="$HOSTNAME"
+fi
+export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$ "
 EOF_PROMPT
     echo "✔ Added dynamic prompt to .bashrc"
 else
@@ -680,6 +694,23 @@ $HELPER_CONTENT
 EOF_HELPER
 chmod +x helper.sh
 echo "helper.sh created and made executable."
+EOF
+
+INJECT_CLINE_CUSTOM_INSTRUCTIONS_CONTENT=$(cat "$(dirname "$0")/inject_cline_custom_instructions.sh")
+
+#*************************************
+# Create inject_cline_custom_instructions.sh
+#*************************************
+echo "Creating inject_cline_custom_instructions.sh script..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > inject_cline_custom_instructions.sh << 'EOF_INJECT_CLINE_CUSTOM_INSTRUCTIONS'
+$INJECT_CLINE_CUSTOM_INSTRUCTIONS_CONTENT
+EOF_INJECT_CLINE_CUSTOM_INSTRUCTIONS
+chmod +x inject_cline_custom_instructions.sh
+echo "inject_cline_custom_instructions.sh created and made executable."
+echo "running inject_cline_custom_instructions.sh"
+./inject_cline_custom_instructions.sh
 EOF
 
 #*************************************
@@ -829,12 +860,23 @@ cat > .vscode/tasks.json << 'EOF_TASKS'
         {
             "label": "CMake: build",
             "type": "shell",
-            "command": "cd \${workspaceFolder}/build && cmake --build .",
+            "command": "\${workspaceFolder}/build.sh",
             "group": {
                 "kind": "build",
                 "isDefault": true
             }
-        }
+        },
+        {
+            "label": "Auto install extensions",
+            "type": "shell",
+            "command": "jq -r '.recommendations[]' .vscode/extensions.json | xargs -L 1 code --install-extension",
+            "runOptions": {
+              "runOn": "folderOpen"
+            },
+            "presentation": {
+              "reveal": "silent"
+            }
+        }        
     ]
 }
 EOF_TASKS
@@ -887,15 +929,24 @@ EOF
 # Create launch.json
 #*************************************
 echo "Creating launch.json..."
-distrobox enter $CONTAINER_NAME -- bash << EOF
-cd $CONTAINER_PROJECT_FOLDER
 
+# First, determine the binary name
 BIN_NAME="cpp_demo"
-if [ -f .dist_build ]; then
-    BIN_NAME=\$(awk -F'"' '/^Container_Bin_Name=/{print \$2}' .dist_build)
+DIST_BUILD_CHECK=$(distrobox enter $CONTAINER_NAME -- bash -c "cd $CONTAINER_PROJECT_FOLDER && if [ -f .dist_build ]; then echo 'exists'; else echo 'not-exists'; fi")
+
+if [ "$DIST_BUILD_CHECK" = "exists" ]; then
+    echo "Reading binary name from .dist_build file..."
+    BIN_NAME=$(distrobox enter $CONTAINER_NAME -- bash -c "cd $CONTAINER_PROJECT_FOLDER && awk -F'\"' '/^Container_Bin_Name=/{print \$2}' .dist_build")
+    echo "Binary name from .dist_build: $BIN_NAME"
+else
+    echo "Using default binary name: $BIN_NAME"
 fi
 
-cat > .vscode/launch.json << 'EOF_LAUNCH'
+# Create a temporary launch.json file locally
+TMP_LAUNCH_JSON="/tmp/launch.json.$$"
+
+# Create the launch.json content with literal ${workspaceFolder}
+cat > $TMP_LAUNCH_JSON << 'EOF_LAUNCH'
 {
     "version": "0.2.0",
     "configurations": [
@@ -903,10 +954,11 @@ cat > .vscode/launch.json << 'EOF_LAUNCH'
             "name": "Debug C++ Project",
             "type": "cppdbg",
             "request": "launch",
-            "program": "\${workspaceFolder}/build/\${BIN_NAME}",
+            "program": "${workspaceFolder}/build/BINARY_NAME_PLACEHOLDER",
+            //"program": "${workspaceFolder}/build/${BIN_NAME}",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "\${workspaceFolder}/build",
+            "cwd": "${workspaceFolder}/build",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -923,6 +975,34 @@ cat > .vscode/launch.json << 'EOF_LAUNCH'
     ]
 }
 EOF_LAUNCH
+
+# Replace the placeholder with the actual binary name
+sed -i "s/BINARY_NAME_PLACEHOLDER/$BIN_NAME/g" $TMP_LAUNCH_JSON
+
+# Create the .vscode directory in the container if it doesn't exist
+distrobox enter $CONTAINER_NAME -- bash -c "cd $CONTAINER_PROJECT_FOLDER && mkdir -p .vscode"
+
+# Copy the launch.json file to the container
+distrobox enter $CONTAINER_NAME -- bash -c "cd $CONTAINER_PROJECT_FOLDER && cat > .vscode/launch.json" < $TMP_LAUNCH_JSON
+
+# Clean up
+rm $TMP_LAUNCH_JSON
+
+echo "launch.json created successfully."
+
+#*************************************
+# Install VSCode extensions
+#*************************************
+echo "Installing VSCode extensions..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+if [ -f .vscode/extensions.json ]; then
+    echo "Installing recommended VSCode extensions from extensions.json..."
+    jq -r '.recommendations[]' .vscode/extensions.json | xargs -L 1 code --install-extension
+    echo "VSCode extensions installed successfully."
+else
+    echo "extensions.json not found, skipping extension installation."
+fi
 EOF
 
 #*************************************

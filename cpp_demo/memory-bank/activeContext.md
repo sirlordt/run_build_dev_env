@@ -13,23 +13,36 @@ The current focus is on initializing the memory bank for the C++ Demo Applicatio
 ## Recent Changes
 
 ### Environment Enhancements
-- Added VSCode password-store configuration to use basic authentication
-- Added VSCode Git configuration to disable Git features in the container:
-  - Disabled Git integration in VSCode
-  - Disabled Git credential store
-  - Disabled automatic Git fetching
-  - Disabled Git sync confirmation prompts
-- Added custom prompt configuration for Distrobox container:
-  - Ensures .bashrc is sourced from .bash_profile for login shells
-  - Adds a custom prompt with container ID in bright green
-  - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$"
-  - Applies the new prompt immediately
-- Added nano to the list of installed packages for better text editing options
-- Enhanced launch.json processing in project creation:
-  - Added proper commenting and uncommenting of program lines
-  - Added project-specific program line for debugging
-  - Added cleanup of duplicate entries
-  - Preserved template program lines in commented form
+- Added new script **inject_cline_custom_instructions.sh**:
+  - Creates custom instructions for Claude AI assistant
+  - Configures Claude to maintain a "Memory Bank" of project documentation
+  - Sets up a structured approach to documentation with core files
+  - Defines workflows for Plan Mode and Act Mode
+  - Establishes documentation update processes
+  - Uses SQLite to store configuration in VSCode's database
+
+- Enhanced build_cpp_dev_env.sh:
+  - Added `nano`, `sqlite3`, and `jq` to the list of installed packages
+  - Added code to create and run inject_cline_custom_instructions.sh in the container
+  - Added CONTAINER_NAME to system-wide environment variables in /etc/environment
+  - Added VSCode password-store configuration to use basic authentication
+  - Added VSCode Git configuration to disable Git features in the container:
+    - Disabled Git integration in VSCode
+    - Disabled Git credential store
+    - Disabled Git auto-fetch
+    - Disabled Git sync confirmation prompts
+    - Added `"extensions.ignoreRecommendations": false` to allow extension recommendations
+  - Added custom prompt configuration for Distrobox container:
+    - Ensures .bashrc is sourced from .bash_profile for login shells
+    - Adds a custom prompt with container name in bright green
+    - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$"
+    - Applies the new prompt immediately
+
+- Enhanced VSCode integration:
+  - Improved tasks.json to use build.sh script for building
+  - Added auto-install extensions task that runs on folder open
+  - Improved launch.json creation with better binary name detection
+  - Added automatic VSCode extension installation
 
 ### Memory Bank Creation
 - Created memory-bank directory
@@ -62,6 +75,11 @@ The current focus is on initializing the memory bank for the C++ Demo Applicatio
 4. Create examples of multi-threading and concurrency
 
 ## Active Decisions and Considerations
+
+### AI Assistant Integration
+- **Decision**: Integrate Claude AI assistant with custom instructions for documentation
+- **Rationale**: Ensures consistent documentation maintenance and knowledge transfer
+- **Status**: Implemented
 
 ### Documentation Strategy
 - **Decision**: Create comprehensive memory bank documentation

@@ -29,6 +29,8 @@
 | Midnight Commander (mc) | File management |
 | htop | System monitoring |
 | nano | Text editing |
+| SQLite3 | Database for AI assistant configuration |
+| jq | JSON processing for AI assistant configuration |
 
 ## Development Setup
 
@@ -45,7 +47,7 @@ The development environment is set up using Distrobox, which provides a containe
 - **nano**: Simple text editor for quick edits
 
 #### VSCode Configuration:
-- **Extensions**: C/C++, CMake Tools, Docker
+- **Extensions**: C/C++, CMake Tools, Docker, Claude AI
 - **Debugging**: Configured for C++ applications
 - **Password Store**: Set to "basic" to prevent credential prompts
   ```json
@@ -59,7 +61,22 @@ The development environment is set up using Distrobox, which provides a containe
     "git.enabled": false,
     "git.useCredentialStore": false,
     "git.autofetch": false,
-    "git.confirmSync": false
+    "git.confirmSync": false,
+    "extensions.ignoreRecommendations": false
+  }
+  ```
+- **Auto-Install Extensions**: Task configured to run on folder open
+  ```json
+  {
+    "label": "Auto install extensions",
+    "type": "shell",
+    "command": "jq -r '.recommendations[]' .vscode/extensions.json | xargs -L 1 code --install-extension",
+    "runOptions": {
+      "runOn": "folderOpen"
+    },
+    "presentation": {
+      "reveal": "silent"
+    }
   }
   ```
 
@@ -67,12 +84,19 @@ The development environment is set up using Distrobox, which provides a containe
 - **Custom Prompt**: Configured for better visibility in Distrobox container
   ```bash
   # Custom prompt for Distrobox container
-  export CONTAINER_ID=1
-  export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$ "
+  # Make CONTAINER_NAME available as an environment variable
+  if [ -z "$CONTAINER_NAME" ]; then
+      export CONTAINER_NAME="$HOSTNAME"
+  fi
+  export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$ "
   ```
 - **Login Shell Setup**: Ensures .bashrc is sourced from .bash_profile
   ```bash
   [[ -f ~/.bashrc ]] && source ~/.bashrc
+  ```
+- **Environment Variables**: CONTAINER_NAME added to system-wide environment variables
+  ```bash
+  echo "CONTAINER_NAME=$CONTAINER_NAME" | sudo tee -a /etc/environment
   ```
 
 ### Build Configuration
@@ -193,6 +217,25 @@ docker tag "$Container_Name" "$Container_Name:$tag"
 2. Run `build.dist.sh` to create a Docker container
 3. Test the containerized application
 4. Push the container to a registry if needed
+
+### AI Assistant Integration
+
+The project uses Claude AI assistant for documentation maintenance through a custom integration:
+
+1. **Configuration**:
+   - The `inject_cline_custom_instructions.sh` script configures Claude with custom instructions
+   - SQLite3 is used to store the configuration in VSCode's database
+   - jq is used for JSON processing during configuration
+
+2. **Memory Bank Pattern**:
+   - Claude maintains a "Memory Bank" of project documentation
+   - Core files include projectbrief.md, productContext.md, systemPatterns.md, etc.
+   - Documentation follows a clear hierarchy and structure
+
+3. **Documentation Workflow**:
+   - Plan Mode: Used for planning and discussing documentation updates
+   - Act Mode: Used for implementing documentation changes
+   - Documentation updates occur when discovering new patterns, implementing changes, or when explicitly requested
 
 ## Deployment Considerations
 

@@ -11,6 +11,7 @@
 !README.md
 !README_ES.md
 !ChangeLog.md
+!inject_cline_custom_instructions.sh
 
 # Ignore all directories except memory-bank
 */

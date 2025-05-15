@@ -1,5 +1,76 @@
 # ChangeLog
 
+## 2025-05-14 23:15:00 (America/Los_Angeles, UTC-7:00)
+
+### Added
+- New script for AI assistant integration:
+  - Added inject_cline_custom_instructions.sh for configuring Claude AI assistant
+  - Implemented Memory Bank pattern for documentation maintenance
+  - Set up structured approach to project documentation
+  - Defined workflows for Plan Mode and Act Mode
+  - Added SQLite integration for storing configuration in VSCode's database
+- Enhanced VSCode integration:
+  - Added auto-install extensions task that runs on folder open
+  - Added Claude AI extension to recommended extensions
+  - Improved launch.json creation with better binary name detection
+
+### Changed
+- Enhanced build_cpp_dev_env.sh:
+  - Added `sqlite3` and `jq` to the list of installed packages
+  - Added code to create and run inject_cline_custom_instructions.sh in the container
+  - Added CONTAINER_NAME to system-wide environment variables in /etc/environment
+  - Improved tasks.json to use build.sh script for building
+  - Updated custom prompt to use container name instead of container ID
+- Updated .gitignore:
+  - Added inject_cline_custom_instructions.sh to the list of tracked files
+
+## 2025-05-14 19:57:36 (America/Los_Angeles, UTC-7:00)
+
+### Changed
+- Updated memory-bank documentation:
+  - Updated custom prompt configuration to use CONTAINER_ID instead of hostname
+  - Modified PS1 format in all documentation files
+  - Updated activeContext.md, techContext.md and progress.md in both directories
+  - Ensured consistent documentation across all memory-bank files
+
+## 2025-05-14 19:44:34 (America/Los_Angeles, UTC-7:00)
+
+### Added
+- Added git_commands.md with reference for git commands
+- Added documentation for custom prompt configuration
+
+### Changed
+- Updated memory-bank documentation:
+  - Documented custom prompt configuration for Distrobox container
+  - Updated activeContext.md, techContext.md and progress.md files
+  - Added details about .bashrc and .bash_profile configuration
+  - Included prompt format with hostname in bright green
+- Updated .gitignore to track memory-bank directories
+
+## 2025-05-14 19:09:30 (America/Los_Angeles, UTC-7:00)
+
+### Added
+- Created git_commands.md with references of useful Git commands
+- Added documentation for the git --no-pager diff --staged command
+
+### Changed
+- Updated memory-bank documentation:
+  - Documented VSCode Git configuration
+  - Documented disabling of Git features in VSCode within the container
+  - Updated activeContext.md, techContext.md and progress.md in both directories
+
+## 2025-05-14 18:30:47 (America/Los_Angeles, UTC-7:00)
+
+### Added
+- Enhanced VSCode integration:
+  - Added VSCode password-store configuration to prevent credential prompts
+  - Enhanced launch.json processing in create_cpp_project_from_template.sh
+  - Added proper commenting and project-specific program paths in launch.json
+
+### Changed
+- Added nano to installed packages for better text editing options
+- Updated memory-bank documentation to reflect these changes
+
 ## 2025-04-19 20:02:00 (America/Los_Angeles, UTC-7:00)
 
 ### Changed

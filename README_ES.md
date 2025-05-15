@@ -10,6 +10,8 @@ Este script (`build_cpp_dev_env.sh`) configura un entorno de desarrollo C++ comp
 - Crea un proyecto demo de C++ en ~/Desktop/projects/cpp/cpp_demo
 - Registra toda la salida en un archivo de log con marca de tiempo
 - Proporciona integración con Docker para containerizar tus aplicaciones C++
+- Configura el asistente de IA Claude con instrucciones personalizadas para el mantenimiento de la documentación
+- Configura la instalación automática de extensiones de VSCode
 
 ## Uso
 
@@ -66,6 +68,8 @@ Los siguientes scripts están diseñados para ser utilizados dentro del entorno 
 - **helper.sh**: Un script de utilidad para compilar, ejecutar e inspeccionar contenedores creados a partir de tu aplicación C++. Proporciona comandos convenientes para gestionar los contenedores Docker.
 
 - **create_cpp_project_from_template.sh**: Crea nuevos proyectos C++ a partir de plantillas. Este script puede ser utilizado para crear nuevos proyectos basados en existentes, facilitando el inicio de nuevas aplicaciones con una estructura consistente.
+
+- **inject_cline_custom_instructions.sh**: Configura el asistente de IA Claude con instrucciones personalizadas para mantener la documentación del proyecto. Este script establece un patrón de "Banco de Memoria" para la documentación, asegurando una transferencia de conocimiento y mantenimiento de documentación consistentes.
 
 Para utilizar estos scripts, debes:
 1. Estar dentro del contenedor Distrobox (`distrobox enter cpp_dev_env`)

@@ -10,6 +10,8 @@ This script (`build_cpp_dev_env.sh`) sets up a complete C++ development environm
 - Creates a C++ demo project in ~/Desktop/projects/cpp/cpp_demo
 - Logs all output to a timestamped log file
 - Provides Docker integration for containerizing your C++ applications
+- Configures Claude AI assistant with custom instructions for documentation maintenance
+- Sets up automatic VSCode extension installation
 
 ## Usage
 
@@ -66,6 +68,8 @@ The following scripts are designed to be used within the Distrobox environment a
 - **helper.sh**: A utility script for building, running, and inspecting containers created from your C++ application. It provides convenient commands for managing the Docker containers.
 
 - **create_cpp_project_from_template.sh**: Creates new C++ projects from templates. This script can be used to create new projects based on existing ones, making it easy to start new applications with a consistent structure.
+
+- **inject_cline_custom_instructions.sh**: Configures Claude AI assistant with custom instructions for maintaining project documentation. This script sets up a "Memory Bank" pattern for documentation, ensuring consistent knowledge transfer and documentation maintenance.
 
 To use these scripts, you must:
 1. Be inside the Distrobox container (`distrobox enter cpp_dev_env`)

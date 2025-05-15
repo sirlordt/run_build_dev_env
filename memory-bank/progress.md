@@ -159,23 +159,39 @@ The memory bank documentation has been initialized to capture the project's purp
 
 ### Staged Changes (Not Yet Committed)
 
-- Added nano to the list of installed packages for better text editing options
-- Added VSCode password-store configuration to use basic authentication
-- Added VSCode Git configuration to disable Git features in the container:
-  - Disabled Git integration in VSCode
-  - Disabled Git credential store
-  - Disabled automatic Git fetching
-  - Disabled Git sync confirmation prompts
-- Added custom prompt configuration for Distrobox container:
-  - Ensures .bashrc is sourced from .bash_profile for login shells
-  - Adds a custom prompt with container ID in bright green
-  - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$"
-  - Applies the new prompt immediately
-- Enhanced launch.json processing in create_cpp_project_from_template.sh:
-  - Added proper commenting and uncommenting of program lines
-  - Added project-specific program line for debugging
-  - Added cleanup of duplicate entries
-  - Preserved template program lines in commented form
+- Added new script **inject_cline_custom_instructions.sh**:
+  - Creates custom instructions for Claude AI assistant
+  - Configures Claude to maintain a "Memory Bank" of project documentation
+  - Sets up a structured approach to documentation with core files
+  - Defines workflows for Plan Mode and Act Mode
+  - Establishes documentation update processes
+  - Uses SQLite to store configuration in VSCode's database
+
+- Enhanced build_cpp_dev_env.sh:
+  - Added `nano`, `sqlite3`, and `jq` to the list of installed packages
+  - Added code to create and run inject_cline_custom_instructions.sh in the container
+  - Added CONTAINER_NAME to system-wide environment variables in /etc/environment
+  - Added VSCode password-store configuration to use basic authentication
+  - Added VSCode Git configuration to disable Git features in the container:
+    - Disabled Git integration in VSCode
+    - Disabled Git credential store
+    - Disabled automatic Git fetching
+    - Disabled Git sync confirmation prompts
+    - Added `"extensions.ignoreRecommendations": false` to allow extension recommendations
+  - Added custom prompt configuration for Distrobox container:
+    - Ensures .bashrc is sourced from .bash_profile for login shells
+    - Adds a custom prompt with container name in bright green
+    - Sets PS1 with format "(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$"
+    - Applies the new prompt immediately
+
+- Updated .gitignore:
+  - Added inject_cline_custom_instructions.sh to the list of tracked files
+
+- Enhanced VSCode integration:
+  - Improved tasks.json to use build.sh script for building
+  - Added auto-install extensions task that runs on folder open
+  - Improved launch.json creation with better binary name detection
+  - Added automatic VSCode extension installation
 
 ### Current Direction
 
@@ -185,11 +201,13 @@ The project is evolving towards:
    - Better documentation
    - Enhanced error handling
    - More intuitive workflows
+   - AI assistant integration for documentation maintenance
 
 2. **Expanded Capabilities**:
    - Support for additional languages and frameworks
    - Integration with CI/CD systems
    - More flexible template system
+   - Automated extension installation and configuration
 
 3. **Enhanced Security**:
    - More granular permission handling
@@ -200,3 +218,8 @@ The project is evolving towards:
    - Comprehensive testing across different environments
    - Automated testing framework
    - Performance benchmarking
+
+5. **Documentation Automation**:
+   - AI-assisted documentation maintenance
+   - Structured approach to project documentation
+   - Memory Bank pattern for consistent knowledge transfer

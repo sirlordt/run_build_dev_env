@@ -38,8 +38,19 @@
 
 4. **Visual Studio Code**
    - Purpose: Integrated development environment
-   - Extensions: C/C++, CMake Tools, Docker, Conan
+   - Extensions: C/C++, CMake Tools, Docker, Conan, Claude AI
    - Configuration: Pre-configured for C++ development with debugging support
+   - Auto-installation: Extensions are automatically installed when a project is opened
+
+5. **SQLite3**
+   - Purpose: Embedded database for configuration storage
+   - Used by: inject_cline_custom_instructions.sh for storing Claude AI configuration
+   - Features: Lightweight, serverless, self-contained
+
+6. **jq**
+   - Purpose: JSON processor for command-line
+   - Used by: inject_cline_custom_instructions.sh for JSON manipulation
+   - Features: Filtering, transformation, and extraction of JSON data
 
 ### Shell Scripting
 
@@ -47,6 +58,14 @@
    - Purpose: Scripting language for automation
    - Used for: All automation scripts in the project
    - Features: Process management, error handling, environment configuration
+
+### AI Integration
+
+1. **Claude AI**
+   - Purpose: AI assistant for development and documentation
+   - Integration: VSCode extension (saoudrizwan.claude-dev)
+   - Configuration: Custom instructions for maintaining project documentation
+   - Features: Memory Bank pattern for documentation, Plan/Act mode workflows
 
 ## Development Setup
 
@@ -105,6 +124,17 @@
    ./create_cpp_project_from_template.sh --template TEMPLATE_FOLDER --name NEW_PROJECT_NAME
    ```
 
+6. **Documentation Maintenance**:
+   ```
+   # Claude AI assistant is used with the Memory Bank pattern
+   # The assistant reads all memory-bank/*.md files at the start of each task
+   ```
+
+7. **AI Assistant Configuration**:
+   ```
+   ./inject_cline_custom_instructions.sh
+   ```
+
 ## Technical Constraints
 
 1. **Host System Compatibility**:
@@ -140,6 +170,7 @@
    - Ubuntu 22.04 packages
    - Development tools (build-essential, git, etc.)
    - Docker CLI tools
+   - SQLite3 and jq for AI assistant configuration
 
 ### Internal Dependencies
 
@@ -147,12 +178,14 @@
    - build.sh depends on CMake and Conan
    - build.dist.sh depends on build.sh and Docker
    - helper.sh provides utilities used by other scripts
+   - inject_cline_custom_instructions.sh depends on SQLite3 and jq
 
 2. **Configuration Dependencies**:
    - .dist_build defines container configuration
    - .env_dist defines environment variables
    - CMakeLists.txt defines build configuration
    - conanfile.txt defines package dependencies
+   - VSCode's state.vscdb stores Claude AI custom instructions
 
 ## Tool Usage Patterns
 
@@ -244,7 +277,8 @@ The environment disables Git integration in VSCode to prevent credential issues 
   "git.enabled": false,
   "git.useCredentialStore": false,
   "git.autofetch": false,
-  "git.confirmSync": false
+  "git.confirmSync": false,
+  "extensions.ignoreRecommendations": false
 }
 ```
 
@@ -253,6 +287,7 @@ This configuration is added to `~/.config/Code/User/settings.json` during contai
 - Prevent the use of credential store for Git
 - Disable automatic fetching of Git repositories
 - Disable confirmation prompts for Git sync operations
+- Allow extension recommendations to enable auto-installation of recommended extensions
 
 #### Shell Configuration
 
@@ -260,14 +295,18 @@ The environment configures a custom prompt for the Distrobox container:
 
 ```bash
 # Custom prompt for Distrobox container
-export CONTAINER_ID=1
-export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_ID\[\e[0m\]:\w\$ "
+# Make CONTAINER_NAME available as an environment variable
+if [ -z "$CONTAINER_NAME" ]; then
+    export CONTAINER_NAME="$HOSTNAME"
+fi
+export PS1="(\h) \u@\[\e[1;32m\]$CONTAINER_NAME\[\e[0m\]:\w\$ "
 ```
 
 This configuration is added to `~/.bashrc` during container setup to:
-- Display the container ID in bright green
+- Display the container name in bright green
 - Show the hostname in parentheses
 - Provide a clear visual indication that you're working inside a container
+- Use the CONTAINER_NAME environment variable (or hostname as fallback)
 
 The setup also ensures `.bashrc` is sourced from `.bash_profile` for login shells:
 
