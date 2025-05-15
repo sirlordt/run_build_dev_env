@@ -595,6 +595,36 @@ EOF_SETTINGS
 
 echo "VSCode Git configuration added to ~/.config/Code/User/settings.json"
 
+#*************************************
+# Set up custom prompt for Distrobox container
+#*************************************
+# Ensure .bashrc is sourced from .bash_profile (for login shells)
+BASHRC="$HOME/.bashrc"
+BASHPROFILE="$HOME/.bash_profile"
+
+if ! grep -q '\.bashrc' "$BASHPROFILE" 2>/dev/null; then
+    echo "[[ -f ~/.bashrc ]] && source ~/.bashrc" >> "$BASHPROFILE"
+    echo "✔ Added .bashrc sourcing to .bash_profile"
+fi
+
+# Add prompt customization block with container hostname in bright green
+if ! grep -q 'PS1.*hostname' "$BASHRC"; then
+    cat >> "$BASHRC" << 'EOF_PROMPT'
+
+# Custom prompt for Distrobox container
+export CONTAINER_ID=1
+export PS1="(\h) \u@\[\e[1;32m\]\$(hostname)\[\e[0m\]:\w\$ "
+EOF_PROMPT
+    echo "✔ Added dynamic prompt to .bashrc"
+else
+    echo "ℹ Prompt block already present in .bashrc"
+fi
+
+# Apply the new prompt immediately
+source "$BASHRC"
+
+echo "Custom prompt configuration added to ~/.bashrc"
+
 EOF
 
 #*************************************

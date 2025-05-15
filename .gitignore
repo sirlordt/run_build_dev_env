@@ -12,5 +12,9 @@
 !README_ES.md
 !ChangeLog.md
 
-# Ignore all directories
+# Ignore all directories except memory-bank
 */
+!memory-bank/
+!memory-bank/**
+!cpp_demo/memory-bank/
+!cpp_demo/memory-bank/**
