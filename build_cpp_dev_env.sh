@@ -471,7 +471,7 @@ if [ "$DO_SETUP" = true ]; then
 
     # Install basic development tools
     echo "Installing build-essential, git, mc, htop..."
-    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext nano sqlite3 jq
+    sudo apt install -y build-essential gdb git mc htop python3-pip curl gnupg lsb-release ca-certificates gettext nano sqlite3 jq valgrind
 
     # Install Docker from the official Docker repository
     echo "Installing Docker from the official Docker repository..."
@@ -848,6 +848,32 @@ mkdir -p .vscode
 EOF
 
 #*************************************
+# Create c_cpp_properties.json
+#*************************************
+echo "Creating c_cpp_properties.json..."
+distrobox enter $CONTAINER_NAME -- bash << EOF
+cd $CONTAINER_PROJECT_FOLDER
+cat > .vscode/c_cpp_properties.json << 'EOF_C_CPP_PROPS'
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**/*"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c17",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
+EOF_C_CPP_PROPS
+EOF
+
+#*************************************
 # Create tasks.json
 #*************************************
 echo "Creating tasks.json..."
@@ -876,7 +902,7 @@ cat > .vscode/tasks.json << 'EOF_TASKS'
             "presentation": {
               "reveal": "silent"
             }
-        }        
+        }
     ]
 }
 EOF_TASKS

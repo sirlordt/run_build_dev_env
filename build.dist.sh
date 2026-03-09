@@ -1,9 +1,9 @@
 #!/bin/bash
-# build.dist.sh — Script for building a Docker container from the C++ demo application
+# build.dist.sh — Script for building a Docker container from the C++ Extended Library
 
 set -e
 
-echo "Generating Dockerfile for C++ demo application..."
+echo "Generating Dockerfile for C++ Extended Library..."
 
 # 1. Load variables from .dist_build
 if [ -f .dist_build ]; then
@@ -14,8 +14,8 @@ else
 fi
 
 # 2. Default values
-Container_Group="${Container_Group:-cpp_demo}"
-Container_User="${Container_User:-cpp_demo}"
+Container_Group="${Container_Group:-cpp_ex}"
+Container_User="${Container_User:-cpp_ex}"
 Container_Group_Id="${Container_Group_Id:-1000}"
 Container_User_Id="${Container_User_Id:-1000}"
 
@@ -59,9 +59,9 @@ cat .build_env.temp.1 | sed \
     > .build_env.temp.2
 
 # Export variables for envsubst
-export Container_Bin_Name="cpp_demo"
+export Container_Bin_Name="cpp_ex"
 # Ensure Container_Bin_Path doesn't have a trailing slash to avoid double slashes
-export Container_Bin_Path="/usr/local/bin/cpp_demo"
+export Container_Bin_Path="/usr/local/bin/cpp_ex"
 
 # Expand remaining variables
 cat .build_env.temp.2 | envsubst > .build_env.temp
@@ -106,7 +106,7 @@ PROCESSED_CONTAINER_TAGS=$(echo "$Container_Tags" | envsubst)
 
 # Ensure Container_Name is not empty
 if [ -z "$Container_Name" ]; then
-    Container_Name="cpp_demo"
+    Container_Name="cpp_ex"
     echo "Warning: Container_Name not set in .dist_build, using default: $Container_Name"
 fi
 
@@ -147,8 +147,106 @@ echo "Building project with Conan and CMake..."
 ./build.sh
 
 # 9. Detect dependencies
-PACKAGES="ca-certificates libc6 libgcc-s1"
-CONTAINER_DEPS="libc6:$(dpkg-query -W -f='${Version}' libc6);libgcc-s1:$(dpkg-query -W -f='${Version}' libgcc-s1)"
+echo "Detecting shared library dependencies..."
+# Start with basic packages that are always needed
+PACKAGES="ca-certificates"
+CONTAINER_DEPS=""
+
+# Map of known libraries to their packages
+declare -A LIB_TO_PKG_MAP
+LIB_TO_PKG_MAP["/lib/x86_64-linux-gnu/libasan.so.6"]="libasan6"
+LIB_TO_PKG_MAP["/lib/x86_64-linux-gnu/libstdc++.so.6"]="libstdc++6"
+LIB_TO_PKG_MAP["/lib/x86_64-linux-gnu/libubsan.so.1"]="libubsan1"
+LIB_TO_PKG_MAP["/lib/x86_64-linux-gnu/libm.so.6"]="libc6"  # libm is part of libc6
+
+# Function to add a package to our list
+add_package() {
+    local pkg="$1"
+    
+    # Check if package is already in our list
+    if [[ ! " $PACKAGES " =~ " $pkg " ]]; then
+        echo "Adding package: $pkg"
+        PACKAGES="$PACKAGES $pkg"
+        
+        # Get package version
+        PKG_VERSION=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null)
+        if [ -n "$PKG_VERSION" ]; then
+            if [ -n "$CONTAINER_DEPS" ]; then
+                CONTAINER_DEPS="$CONTAINER_DEPS;"
+            fi
+            CONTAINER_DEPS="${CONTAINER_DEPS}${pkg}:${PKG_VERSION}"
+        else
+            echo "Warning: Could not determine version for package: $pkg"
+        fi
+    fi
+}
+
+# Use ldd to detect shared library dependencies
+if [ -f "build/$Container_Bin_Name" ]; then
+    echo "Analyzing executable: build/$Container_Bin_Name"
+    
+    # Get all shared libraries used by the executable
+    LIBS=$(ldd "build/$Container_Bin_Name" | grep "=>" | awk '{print $3}' | sort | uniq)
+    
+    echo "Found shared libraries:"
+    echo "$LIBS"
+    
+    # Find which Debian packages provide these libraries
+    for lib in $LIBS; do
+        # Skip libraries that don't exist (like linux-vdso.so.1)
+        if [ ! -f "$lib" ]; then
+            continue
+        fi
+        
+        # Check if we have this library in our known map
+        if [ -n "${LIB_TO_PKG_MAP[$lib]}" ]; then
+            pkg="${LIB_TO_PKG_MAP[$lib]}"
+            echo "Library $lib provided by package (from map): $pkg"
+            add_package "$pkg"
+        else
+            # Find the package that provides this library
+            PKG=$(dpkg -S "$lib" 2>/dev/null | cut -d: -f1 | sort | uniq)
+            
+            if [ -n "$PKG" ]; then
+                for pkg in $PKG; do
+                    echo "Library $lib provided by package: $pkg"
+                    add_package "$pkg"
+                done
+            else
+                echo "Warning: Could not determine package for library: $lib"
+                
+                # Try to guess based on filename
+                base_name=$(basename "$lib")
+                if [[ "$base_name" =~ ^lib([^.]+)\.so\. ]]; then
+                    lib_name="${BASH_REMATCH[1]}"
+                    potential_pkg="lib${lib_name}"
+                    
+                    # Check if this package exists
+                    if dpkg -l "$potential_pkg" &>/dev/null; then
+                        echo "Guessing package for $lib: $potential_pkg"
+                        add_package "$potential_pkg"
+                    else
+                        echo "Could not guess package for $lib"
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    # Always add these critical packages for C++ applications
+    add_package "libc6"
+    add_package "libgcc-s1"
+    add_package "libstdc++6"
+else
+    echo "Warning: Executable not found at build/$Container_Bin_Name"
+    echo "Using default dependencies: libc6 libgcc-s1 libstdc++6"
+    add_package "libc6"
+    add_package "libgcc-s1"
+    add_package "libstdc++6"
+fi
+
+echo "Detected packages: $PACKAGES"
+echo "Container dependencies: $CONTAINER_DEPS"
 
 # 10. Generate dockerfile.dist
 echo "Generating dockerfile.dist..."
